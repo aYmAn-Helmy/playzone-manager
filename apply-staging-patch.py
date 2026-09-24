@@ -145,3 +145,54 @@ if old in js:
 elif '/voltra/console-ticket' not in js:
     raise RuntimeError('Could not locate Voltra localhost dashboard link')
 js_path.write_text(js, encoding='utf-8')
+
+
+# v0.18 dashboard identity + English clock digits
+js_files = list(DIST.glob('*.js'))
+if len(js_files) != 1:
+    raise RuntimeError(f'Expected one frontend JS asset for v0.18, found {len(js_files)}')
+js_path = js_files[0]
+js = js_path.read_text(encoding='utf-8')
+
+old_station_icon = '(0,j.jsx)(`span`,{className:`station-icon`,children:(0,j.jsx)(_e,{size:23})})'
+new_station_icon = '(0,j.jsx)(`span`,{className:`station-icon station-ps-icon`,children:(0,j.jsxs)(`svg`,{className:`station-ps-logo`,viewBox:`0 0 64 64`,"aria-hidden":!0,focusable:`false`,children:[(0,j.jsx)(`path`,{d:`M24 7c9 1 18 4 21 9 2 4 1 9-3 12-3 2-8 3-13 2v-8c4 .7 7 0 7-3 0-2-3-4-7-4v28l-8 2V8l3-1Z`}),(0,j.jsx)(`path`,{d:`M17 43c9-3 23-6 32-4 7 1 8 5 2 9-8 5-26 9-38 6-7-2-8-6-1-9 4-2 10-3 15-4v6c-5 1-9 2-10 3 6 2 19 0 28-3 4-1 6-3 4-4-2-1-7 0-12 1l-7 2v-8Z`})]})})'
+if old_station_icon in js:
+    js = js.replace(old_station_icon, new_station_icon, 1)
+elif 'station-ps-logo' not in js:
+    raise RuntimeError('Could not locate station gamepad icon for v0.18')
+
+old_clock = '(0,j.jsx)(`strong`,{children:new Intl.DateTimeFormat(`ar-EG`,{timeZone:`Africa/Cairo`,hour:`2-digit`,minute:`2-digit`,second:`2-digit`}).format(new Date)})'
+new_clock = '(0,j.jsx)(`strong`,{dir:`ltr`,lang:`en`,children:new Intl.DateTimeFormat(`en-US`,{timeZone:`Africa/Cairo`,hour:`2-digit`,minute:`2-digit`,second:`2-digit`,hour12:!0}).format(new Date)})'
+if old_clock in js:
+    js = js.replace(old_clock, new_clock, 1)
+elif 'Intl.DateTimeFormat(`en-US`' not in js:
+    raise RuntimeError('Could not locate dashboard clock for v0.18')
+
+js_path.write_text(js, encoding='utf-8')
+
+css_files = list(DIST.glob('*.css'))
+if len(css_files) != 1:
+    raise RuntimeError(f'Expected one frontend CSS asset for v0.18, found {len(css_files)}')
+css_path = css_files[0]
+css = css_path.read_text(encoding='utf-8')
+css_marker = '/* v0.18 PlayStation station mark */'
+if css_marker not in css:
+    css += '\n' + css_marker + '\n.station-ps-icon{color:#57a8ff}.station-ps-logo{width:25px;height:25px;display:block;fill:currentColor}.clock-card strong{unicode-bidi:isolate;direction:ltr;text-align:left}\n'
+css_path.write_text(css, encoding='utf-8')
+
+# Rename assets so browsers cannot keep the older v0.17 UI from cache.
+index_path = PLAYZONE / 'frontend' / 'dist' / 'index.html'
+index_html = index_path.read_text(encoding='utf-8')
+new_js_path = js_path.with_name('index-v018.js')
+new_css_path = css_path.with_name('index-v018.css')
+if js_path != new_js_path:
+    if new_js_path.exists():
+        new_js_path.unlink()
+    js_path.rename(new_js_path)
+    index_html = index_html.replace(js_path.name, new_js_path.name)
+if css_path != new_css_path:
+    if new_css_path.exists():
+        new_css_path.unlink()
+    css_path.rename(new_css_path)
+    index_html = index_html.replace(css_path.name, new_css_path.name)
+index_path.write_text(index_html, encoding='utf-8')
