@@ -12,8 +12,7 @@ RUN cat /app/pkg/runtime.part* | base64 -d > /tmp/runtime.tar.xz \
     && rm -rf /app/pkg /tmp/runtime.tar.xz
 
 COPY apply-staging-patch.py /app/apply-staging-patch.py
-RUN python /app/apply-staging-patch.py \
-    && rm -rf /app/voltra
+RUN python /app/apply-staging-patch.py
 
 RUN pip install --no-cache-dir -r /app/playzone/backend/requirements.txt
 
