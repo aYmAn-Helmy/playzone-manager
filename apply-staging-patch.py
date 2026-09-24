@@ -288,3 +288,141 @@ readability = r'''
 if "PlayZone readability pass v0.6" not in css:
     css += readability
 css_path.write_text(css, encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# v0.8: protected online Voltra console on the same PlayZone domain.
+# ---------------------------------------------------------------------------
+backend2 = MAIN.read_text(encoding="utf-8")
+if "def issue_voltra_console_ticket(" not in backend2:
+    backend2 = backend2.replace(
+        "import sqlite3\nimport secrets\n",
+        "import sqlite3\nimport secrets\nimport os\nimport time\nimport httpx\n",
+        1,
+    )
+    backend2 = backend2.replace(
+        "from fastapi import Depends, FastAPI, Header, HTTPException, Query\n",
+        "from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request\n"
+        "from fastapi.responses import RedirectResponse, Response\n",
+        1,
+    )
+
+    voltra_console_code = r'''
+_VOLTRA_CONSOLE_COOKIE = "playzone_voltra_console"
+_VOLTRA_CONSOLE_TICKETS: dict[str, float] = {}
+_VOLTRA_CONSOLE_SESSIONS: dict[str, float] = {}
+
+
+def _cleanup_voltra_console(now: float) -> None:
+    for store in (_VOLTRA_CONSOLE_TICKETS, _VOLTRA_CONSOLE_SESSIONS):
+        for key, expires_at in list(store.items()):
+            if expires_at <= now:
+                store.pop(key, None)
+
+
+@app.post("/api/voltra/console-ticket")
+def issue_voltra_console_ticket(_: User = Depends(root_ready_user)):
+    now = time.time()
+    _cleanup_voltra_console(now)
+    ticket = secrets.token_urlsafe(32)
+    _VOLTRA_CONSOLE_TICKETS[ticket] = now + 60
+    return {"url": f"/voltra/authorize?ticket={ticket}"}
+
+
+@app.get("/voltra/authorize")
+def authorize_voltra_console(request: Request, ticket: str = Query(...)):
+    now = time.time()
+    _cleanup_voltra_console(now)
+    expires_at = _VOLTRA_CONSOLE_TICKETS.pop(ticket, None)
+    if not expires_at or expires_at <= now:
+        raise HTTPException(401, "Invalid or expired Voltra console ticket")
+
+    session_id = secrets.token_urlsafe(32)
+    _VOLTRA_CONSOLE_SESSIONS[session_id] = now + 1800
+    secure = (
+        request.url.scheme == "https"
+        or request.headers.get("x-forwarded-proto", "").split(",")[0].strip() == "https"
+    )
+    response = RedirectResponse(url="/voltra", status_code=303)
+    response.set_cookie(
+        _VOLTRA_CONSOLE_COOKIE,
+        session_id,
+        max_age=1800,
+        httponly=True,
+        secure=secure,
+        samesite="strict",
+        path="/voltra",
+    )
+    return response
+
+
+def _require_voltra_console(request: Request) -> None:
+    now = time.time()
+    _cleanup_voltra_console(now)
+    session_id = request.cookies.get(_VOLTRA_CONSOLE_COOKIE)
+    expires_at = _VOLTRA_CONSOLE_SESSIONS.get(session_id or "")
+    if not expires_at or expires_at <= now:
+        raise HTTPException(401, "Open Voltra from the ROOT dashboard")
+
+
+async def _proxy_voltra_request(request: Request, path: str = "") -> Response:
+    _require_voltra_console(request)
+    target = "http://127.0.0.1:8086/voltra"
+    if path:
+        target += "/" + path
+    if request.url.query:
+        target += "?" + request.url.query
+
+    headers: dict[str, str] = {}
+    if request.headers.get("content-type"):
+        headers["content-type"] = request.headers["content-type"]
+    internal_token = os.getenv("VOLTRA_API_TOKEN", "").strip()
+    if internal_token:
+        headers["authorization"] = f"Bearer {internal_token}"
+
+    body = await request.body()
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            upstream = await client.request(
+                request.method,
+                target,
+                headers=headers,
+                content=body if body else None,
+            )
+    except httpx.RequestError as exc:
+        raise HTTPException(503, f"Voltra console unavailable: {exc}") from exc
+
+    response_headers = {}
+    content_type = upstream.headers.get("content-type")
+    if content_type:
+        response_headers["content-type"] = content_type
+    return Response(
+        content=upstream.content,
+        status_code=upstream.status_code,
+        headers=response_headers,
+    )
+
+
+@app.api_route("/voltra", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+async def proxy_voltra_root(request: Request):
+    return await _proxy_voltra_request(request)
+
+
+@app.api_route("/voltra/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+async def proxy_voltra_path(path: str, request: Request):
+    return await _proxy_voltra_request(request, path)
+'''
+    static_marker = "# Production UI: when \`npm run build\` has created frontend/dist, FastAPI serves"
+    if static_marker not in backend2:
+        raise RuntimeError("Could not locate frontend static mount marker for Voltra proxy")
+    backend2 = backend2.replace(static_marker, voltra_console_code + "\n\n" + static_marker, 1)
+    MAIN.write_text(backend2, encoding="utf-8")
+
+js2 = js_path.read_text(encoding="utf-8")
+old_console_link = '(0,j.jsx)(\`a\`,{className:\`button ghost\`,href:\`http://127.0.0.1:8086/voltra\`,target:\`_blank\`,rel:\`noreferrer\`,children:\`لوحة Voltra\`})'
+new_console_link = '(0,j.jsx)(\`button\`,{className:\`button ghost\`,onClick:()=>{let e=window.open(\`\`,\`_blank\`);e&&(e.opener=null),t(async()=>{let r=await n(\`/voltra/console-ticket\`,\`POST\`);e?e.location.href=r.url:window.location.href=r.url},!1)},children:\`لوحة Voltra\`})'
+if old_console_link in js2:
+    js2 = js2.replace(old_console_link, new_console_link, 1)
+elif new_console_link not in js2:
+    raise RuntimeError("Could not patch Voltra console localhost link")
+js_path.write_text(js2, encoding="utf-8")
