@@ -185,6 +185,46 @@ for old, new in route_replacements.items():
         backend = backend.replace(old, new, 1)
     elif new not in backend:
         raise RuntimeError(f"Could not locate backend route: {old}")
+
+# Passwordless development mode must be consistent across login, /auth/me,
+# user edits, and frontend refreshes. Otherwise resetting ROOT/ADMIN password
+# can leave must_change_password=true and make the dashboard stop loading.
+me_old = '''@app.get("/api/auth/me", response_model=UserOut)
+def me(user: User = Depends(current_user)):
+    return user
+'''
+me_new = '''@app.get("/api/auth/me", response_model=UserOut)
+def me(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    payload = UserOut.model_validate(user).model_dump()
+    if user.role in ("ROOT", "ADMIN") and passwordless_privileged_enabled(db):
+        payload["must_change_password"] = False
+    return payload
+'''
+if me_old in backend:
+    backend = backend.replace(me_old, me_new, 1)
+elif me_new not in backend:
+    raise RuntimeError("Could not patch /api/auth/me passwordless behavior")
+
+password_reset_old = '''    if payload.password is not None:
+        user.password_hash = hash_password(payload.password)
+        user.must_change_password = True
+        changes.append("password reset;must_change_password=true")
+'''
+password_reset_new = '''    if payload.password is not None:
+        user.password_hash = hash_password(payload.password)
+        privileged_passwordless = user.role in ("ROOT", "ADMIN") and passwordless_privileged_enabled(db)
+        user.must_change_password = False if privileged_passwordless else True
+        changes.append(
+            "password reset;must_change_password=false"
+            if privileged_passwordless
+            else "password reset;must_change_password=true"
+        )
+'''
+if password_reset_old in backend:
+    backend = backend.replace(password_reset_old, password_reset_new, 1)
+elif password_reset_new not in backend:
+    raise RuntimeError("Could not patch password reset behavior")
+
 MAIN.write_text(backend, encoding="utf-8")
 
 # ---------------------------------------------------------------------------
@@ -205,6 +245,22 @@ for old, new in js_replacements.items():
         js = js.replace(old, new, 1)
     elif new not in js:
         raise RuntimeError(f"Could not locate frontend marker: {old[:80]}")
+
+# In passwordless development mode, a stale must_change_password flag must not
+# suppress station/dashboard requests after a ROOT/ADMIN account edit.
+passwordless_guard = '!(n?.must_change_password&&!(i?.passwordless_privileged&&n&&[`ROOT`,`ADMIN`].includes(n.role)))'
+frontend_replacements = {
+    'e&&!n?.must_change_password&&i?.activated!==!1': f'e&&{passwordless_guard}&&i?.activated!==!1',
+    'if(e&&!n?.must_change_password)try': f'if(e&&{passwordless_guard})try',
+    'if(!e||!n||n.must_change_password||i?.activated!==!0)return;': f'if(!e||!n||!({passwordless_guard})||i?.activated!==!0)return;',
+    'n&&!n.must_change_password&&i?.activated===!0&&Ie(o)': f'n&&{passwordless_guard}&&i?.activated===!0&&Ie(o)',
+}
+for old, new in frontend_replacements.items():
+    if old in js:
+        js = js.replace(old, new, 1)
+    elif new not in js:
+        raise RuntimeError(f"Could not patch passwordless dashboard guard: {old}")
+
 js_path.write_text(js, encoding="utf-8")
 
 # ---------------------------------------------------------------------------
