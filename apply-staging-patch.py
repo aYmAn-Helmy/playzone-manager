@@ -41,9 +41,9 @@ if len(js_files) != 1:
 js_path = js_files[0]
 js = js_path.read_text(encoding="utf-8")
 js_replacements = {
-    "t===\`voltra\`&&n&&[\`ROOT\`,\`ADMIN\`].includes(n.role)": "t===\`voltra\`&&n?.role===\`ROOT\`",
-    "Ue=He?[\`home\`,\`stations\`,\`sessions\`,\`invoices\`,\`products\`,\`reports\`,\`users\`,\`voltra\`,\`settings\`]:[\`home\`,\`stations\`,\`sessions\`,\`invoices\`]": "Ue=He?[\`home\`,\`stations\`,\`sessions\`,\`invoices\`,\`products\`,\`reports\`,\`users\`,\`voltra\`,\`settings\`].filter(e=>e!==\`voltra\`||n?.role===\`ROOT\`):[\`home\`,\`stations\`,\`sessions\`,\`invoices\`]",
-    "o===\`voltra\`&&He&&(0,j.jsx)(pt,{devices:ae,run:Le,api:A})": "o===\`voltra\`&&n?.role===\`ROOT\`&&(0,j.jsx)(pt,{devices:ae,run:Le,api:A})",
+    "t===`voltra`&&n&&[`ROOT`,`ADMIN`].includes(n.role)".replace("\\", ""): "t===`voltra`&&n?.role===`ROOT`".replace("\\", ""),
+    "Ue=He?[`home`,`stations`,`sessions`,`invoices`,`products`,`reports`,`users`,`voltra`,`settings`]:[`home`,`stations`,`sessions`,`invoices`]".replace("\\", ""): "Ue=He?[`home`,`stations`,`sessions`,`invoices`,`products`,`reports`,`users`,`voltra`,`settings`].filter(e=>e!==`voltra`||n?.role===`ROOT`):[`home`,`stations`,`sessions`,`invoices`]".replace("\\", ""),
+    "o===`voltra`&&He&&(0,j.jsx)(pt,{devices:ae,run:Le,api:A})".replace("\\", ""): "o===`voltra`&&n?.role===`ROOT`&&(0,j.jsx)(pt,{devices:ae,run:Le,api:A})".replace("\\", ""),
 }
 for old, new in js_replacements.items():
     if old not in js:
