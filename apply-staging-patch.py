@@ -297,7 +297,7 @@ backend2 = MAIN.read_text(encoding="utf-8")
 if "def issue_voltra_console_ticket(" not in backend2:
     backend2 = backend2.replace(
         "import sqlite3\nimport secrets\n",
-        "import sqlite3\nimport secrets\nimport os\nimport time\nimport httpx\n",
+        "import sqlite3\nimport secrets\nimport os\nimport time as time_module\nimport httpx\n",
         1,
     )
     backend2 = backend2.replace(
@@ -322,7 +322,7 @@ def _cleanup_voltra_console(now: float) -> None:
 
 @app.post("/api/voltra/console-ticket")
 def issue_voltra_console_ticket(_: User = Depends(root_ready_user)):
-    now = time.time()
+    now = time_module.time()
     _cleanup_voltra_console(now)
     ticket = secrets.token_urlsafe(32)
     _VOLTRA_CONSOLE_TICKETS[ticket] = now + 60
@@ -331,7 +331,7 @@ def issue_voltra_console_ticket(_: User = Depends(root_ready_user)):
 
 @app.get("/voltra/authorize")
 def authorize_voltra_console(request: Request, ticket: str = Query(...)):
-    now = time.time()
+    now = time_module.time()
     _cleanup_voltra_console(now)
     expires_at = _VOLTRA_CONSOLE_TICKETS.pop(ticket, None)
     if not expires_at or expires_at <= now:
@@ -357,7 +357,7 @@ def authorize_voltra_console(request: Request, ticket: str = Query(...)):
 
 
 def _require_voltra_console(request: Request) -> None:
-    now = time.time()
+    now = time_module.time()
     _cleanup_voltra_console(now)
     session_id = request.cookies.get(_VOLTRA_CONSOLE_COOKIE)
     expires_at = _VOLTRA_CONSOLE_SESSIONS.get(session_id or "")
@@ -420,7 +420,7 @@ async def proxy_voltra_path(path: str, request: Request):
 
 js2 = js_path.read_text(encoding="utf-8")
 old_console_link = '(0,j.jsx)(`a`,{className:`button ghost`,href:`http://127.0.0.1:8086/voltra`,target:`_blank`,rel:`noreferrer`,children:`لوحة Voltra`})'
-new_console_link = '(0,j.jsx)(`button`,{className:`button ghost`,onClick:()=>{let e=window.open(``,`_blank`);e&&(e.opener=null),t(async()=>{let r=await n(`/voltra/console-ticket`,`POST`);e?e.location.href=r.url:window.location.href=r.url},!1)},children:`لوحة Voltra`})'
+new_console_link = '(0,j.jsx)(`button`,{className:`button ghost`,onClick:()=>{let e=window.open(`about:blank`,`_blank`);e&&(e.opener=null),t(async()=>{try{let r=await n(`/voltra/console-ticket`,`POST`);e?e.location.replace(r.url):window.location.href=r.url}catch(r){e&&e.close();throw r}},!1)},children:`لوحة Voltra`})'
 if old_console_link in js2:
     js2 = js2.replace(old_console_link, new_console_link, 1)
 elif new_console_link not in js2:
