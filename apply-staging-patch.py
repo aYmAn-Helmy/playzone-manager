@@ -196,3 +196,66 @@ if css_path != new_css_path:
     css_path.rename(new_css_path)
     index_html = index_html.replace(css_path.name, new_css_path.name)
 index_path.write_text(index_html, encoding='utf-8')
+
+
+# v0.20 login PlayStation branding
+js_files = list(DIST.glob('*.js'))
+if len(js_files) != 1:
+    raise RuntimeError(f'Expected one frontend JS asset for v0.20, found {len(js_files)}')
+js_path = js_files[0]
+js = js_path.read_text(encoding='utf-8')
+
+login_start = js.find('function ot(')
+login_end = js.find('function st(', login_start)
+if login_start < 0 or login_end < 0:
+    raise RuntimeError('Could not locate login component for v0.20')
+login = js[login_start:login_end]
+
+old_login_brand = '(0,j.jsx)(`div`,{className:`brand-mark`,children:(0,j.jsx)(_e,{})})'
+new_login_brand = '(0,j.jsx)(`div`,{className:`brand-mark login-ps-brand`,children:(0,j.jsx)(`svg`,{className:`login-ps-logo`,viewBox:`0 0 24 24`,"aria-hidden":!0,focusable:`false`,children:(0,j.jsx)(`path`,{d:`M8.984 2.596v17.547l3.915 1.261V6.688c0-.69.304-1.151.794-.991.636.18.76.814.76 1.505v5.875c2.441 1.193 4.362-.002 4.362-3.152 0-3.237-1.126-4.675-4.438-5.827-1.307-.448-3.728-1.186-5.39-1.502zm4.656 16.241 6.296-2.275c.715-.258.826-.625.246-.818-.586-.192-1.637-.139-2.357.123l-4.205 1.5V14.98l.24-.085s1.201-.42 2.913-.615c1.696-.18 3.785.03 5.437.661 1.848.601 2.04 1.472 1.576 2.072-.465.6-1.622 1.036-1.622 1.036l-8.544 3.107V18.86zM1.807 18.6c-1.9-.545-2.214-1.668-1.352-2.32.801-.586 2.16-1.052 2.16-1.052l5.615-2.013v2.313L4.205 17c-.705.271-.825.632-.239.826.586.195 1.637.15 2.343-.12L8.247 17v2.074c-.12.03-.256.044-.39.073-1.939.331-3.996.196-6.038-.479z`})})})'
+if old_login_brand in login:
+    login = login.replace(old_login_brand, new_login_brand, 1)
+elif 'login-ps-logo' not in login:
+    raise RuntimeError('Could not locate login gamepad icon for v0.20')
+
+old_dev_note = 'e?.passwordless_privileged&&(0,j.jsxs)(`p`,{className:`dev-auth-note`,children:[`وضع التطوير: حسابا `,(0,j.jsx)(`b`,{children:`root`}),` و `,(0,j.jsx)(`b`,{children:`admin`}),` يعملان حالياً بدون كلمة مرور.`]}),'
+if old_dev_note in login:
+    login = login.replace(old_dev_note, '', 1)
+elif 'وضع التطوير: حسابا' in login:
+    raise RuntimeError('Could not remove development auth notice for v0.20')
+
+old_password_placeholder = 'placeholder:`اتركها فارغة لـ root/admin حالياً`'
+if old_password_placeholder in login:
+    login = login.replace(old_password_placeholder, 'placeholder:`أدخل كلمة المرور`', 1)
+elif 'placeholder:`أدخل كلمة المرور`' not in login:
+    raise RuntimeError('Could not update password placeholder for v0.20')
+
+js = js[:login_start] + login + js[login_end:]
+js_path.write_text(js, encoding='utf-8')
+
+css_files = list(DIST.glob('*.css'))
+if len(css_files) != 1:
+    raise RuntimeError(f'Expected one frontend CSS asset for v0.20, found {len(css_files)}')
+css_path = css_files[0]
+css = css_path.read_text(encoding='utf-8')
+css_marker = '/* v0.20 login PlayStation branding */'
+if css_marker not in css:
+    css += '\n' + css_marker + '\n.login-ps-brand{background:#0070d1!important;border:1px solid #2a8bea;box-shadow:0 8px 24px #0070d144}.login-ps-logo{width:27px;height:27px;display:block;fill:#fff}\n'
+css_path.write_text(css, encoding='utf-8')
+
+# Cache-bust the login UI update.
+index_path = PLAYZONE / 'frontend' / 'dist' / 'index.html'
+index_html = index_path.read_text(encoding='utf-8')
+new_js_path = js_path.with_name('index-v020.js')
+new_css_path = css_path.with_name('index-v020.css')
+if js_path != new_js_path:
+    if new_js_path.exists():
+        new_js_path.unlink()
+    js_path.rename(new_js_path)
+    index_html = index_html.replace(js_path.name, new_js_path.name)
+if css_path != new_css_path:
+    if new_css_path.exists():
+        new_css_path.unlink()
+    css_path.rename(new_css_path)
+    index_html = index_html.replace(css_path.name, new_css_path.name)
+index_path.write_text(index_html, encoding='utf-8')
