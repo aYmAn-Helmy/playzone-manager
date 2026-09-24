@@ -147,7 +147,7 @@ elif '/voltra/console-ticket' not in js:
 js_path.write_text(js, encoding='utf-8')
 
 
-# v0.18 dashboard identity + English clock digits
+# v0.19 PlayStation badge + English clock digits
 js_files = list(DIST.glob('*.js'))
 if len(js_files) != 1:
     raise RuntimeError(f'Expected one frontend JS asset for v0.18, found {len(js_files)}')
@@ -155,7 +155,7 @@ js_path = js_files[0]
 js = js_path.read_text(encoding='utf-8')
 
 old_station_icon = '(0,j.jsx)(`span`,{className:`station-icon`,children:(0,j.jsx)(_e,{size:23})})'
-new_station_icon = '(0,j.jsx)(`span`,{className:`station-icon station-ps-icon`,children:(0,j.jsxs)(`svg`,{className:`station-ps-logo`,viewBox:`0 0 64 64`,"aria-hidden":!0,focusable:`false`,children:[(0,j.jsx)(`path`,{d:`M24 7c9 1 18 4 21 9 2 4 1 9-3 12-3 2-8 3-13 2v-8c4 .7 7 0 7-3 0-2-3-4-7-4v28l-8 2V8l3-1Z`}),(0,j.jsx)(`path`,{d:`M17 43c9-3 23-6 32-4 7 1 8 5 2 9-8 5-26 9-38 6-7-2-8-6-1-9 4-2 10-3 15-4v6c-5 1-9 2-10 3 6 2 19 0 28-3 4-1 6-3 4-4-2-1-7 0-12 1l-7 2v-8Z`})]})})'
+new_station_icon = '(0,j.jsx)(`span`,{className:`station-icon station-ps-icon`,children:(0,j.jsx)(`svg`,{className:`station-ps-logo`,viewBox:`0 0 24 24`,"aria-hidden":!0,focusable:`false`,children:(0,j.jsx)(`path`,{d:`M8.984 2.596v17.547l3.915 1.261V6.688c0-.69.304-1.151.794-.991.636.18.76.814.76 1.505v5.875c2.441 1.193 4.362-.002 4.362-3.152 0-3.237-1.126-4.675-4.438-5.827-1.307-.448-3.728-1.186-5.39-1.502zm4.656 16.241 6.296-2.275c.715-.258.826-.625.246-.818-.586-.192-1.637-.139-2.357.123l-4.205 1.5V14.98l.24-.085s1.201-.42 2.913-.615c1.696-.18 3.785.03 5.437.661 1.848.601 2.04 1.472 1.576 2.072-.465.6-1.622 1.036-1.622 1.036l-8.544 3.107V18.86zM1.807 18.6c-1.9-.545-2.214-1.668-1.352-2.32.801-.586 2.16-1.052 2.16-1.052l5.615-2.013v2.313L4.205 17c-.705.271-.825.632-.239.826.586.195 1.637.15 2.343-.12L8.247 17v2.074c-.12.03-.256.044-.39.073-1.939.331-3.996.196-6.038-.479z`})})})'
 if old_station_icon in js:
     js = js.replace(old_station_icon, new_station_icon, 1)
 elif 'station-ps-logo' not in js:
@@ -175,16 +175,16 @@ if len(css_files) != 1:
     raise RuntimeError(f'Expected one frontend CSS asset for v0.18, found {len(css_files)}')
 css_path = css_files[0]
 css = css_path.read_text(encoding='utf-8')
-css_marker = '/* v0.18 PlayStation station mark */'
+css_marker = '/* v0.19 PlayStation station mark */'
 if css_marker not in css:
-    css += '\n' + css_marker + '\n.station-ps-icon{color:#57a8ff}.station-ps-logo{width:25px;height:25px;display:block;fill:currentColor}.clock-card strong{unicode-bidi:isolate;direction:ltr;text-align:left}\n'
+    css += '\n' + css_marker + '\n.station-ps-icon{color:#fff!important;background:#0070d1!important;border-color:#2a8bea!important;box-shadow:0 6px 16px #0070d133}.station-ps-logo{width:26px;height:26px;display:block;fill:#fff}.clock-card strong{unicode-bidi:isolate;direction:ltr;text-align:left}\n'
 css_path.write_text(css, encoding='utf-8')
 
 # Rename assets so browsers cannot keep the older v0.17 UI from cache.
 index_path = PLAYZONE / 'frontend' / 'dist' / 'index.html'
 index_html = index_path.read_text(encoding='utf-8')
-new_js_path = js_path.with_name('index-v018.js')
-new_css_path = css_path.with_name('index-v018.css')
+new_js_path = js_path.with_name('index-v019.js')
+new_css_path = css_path.with_name('index-v019.css')
 if js_path != new_js_path:
     if new_js_path.exists():
         new_js_path.unlink()
