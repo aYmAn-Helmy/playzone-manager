@@ -412,15 +412,15 @@ async def proxy_voltra_root(request: Request):
 async def proxy_voltra_path(path: str, request: Request):
     return await _proxy_voltra_request(request, path)
 '''
-    static_marker = "# Production UI: when \`npm run build\` has created frontend/dist, FastAPI serves"
+    static_marker = "# Production UI: when `npm run build` has created frontend/dist, FastAPI serves"
     if static_marker not in backend2:
         raise RuntimeError("Could not locate frontend static mount marker for Voltra proxy")
     backend2 = backend2.replace(static_marker, voltra_console_code + "\n\n" + static_marker, 1)
     MAIN.write_text(backend2, encoding="utf-8")
 
 js2 = js_path.read_text(encoding="utf-8")
-old_console_link = '(0,j.jsx)(\`a\`,{className:\`button ghost\`,href:\`http://127.0.0.1:8086/voltra\`,target:\`_blank\`,rel:\`noreferrer\`,children:\`لوحة Voltra\`})'
-new_console_link = '(0,j.jsx)(\`button\`,{className:\`button ghost\`,onClick:()=>{let e=window.open(\`\`,\`_blank\`);e&&(e.opener=null),t(async()=>{let r=await n(\`/voltra/console-ticket\`,\`POST\`);e?e.location.href=r.url:window.location.href=r.url},!1)},children:\`لوحة Voltra\`})'
+old_console_link = '(0,j.jsx)(`a`,{className:`button ghost`,href:`http://127.0.0.1:8086/voltra`,target:`_blank`,rel:`noreferrer`,children:`لوحة Voltra`})'
+new_console_link = '(0,j.jsx)(`button`,{className:`button ghost`,onClick:()=>{let e=window.open(``,`_blank`);e&&(e.opener=null),t(async()=>{let r=await n(`/voltra/console-ticket`,`POST`);e?e.location.href=r.url:window.location.href=r.url},!1)},children:`لوحة Voltra`})'
 if old_console_link in js2:
     js2 = js2.replace(old_console_link, new_console_link, 1)
 elif new_console_link not in js2:
