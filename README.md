@@ -1,8 +1,20 @@
 # PlayZone Manager
 
-Current deployment baseline: **v0.22**.
+Current deployment baseline: **v0.23**.
 
 PlayZone Manager is the cashier/session-management application with embedded Voltra screen-power management.
+
+## v0.23 performance update
+- Replaces the one-second server polling loop with a local one-second UI timer, station refresh every 5 seconds, and dashboard/shift refresh every 15 seconds.
+- Actions refresh station state immediately, while secondary dashboard/page refreshes continue without keeping the action button blocked.
+- Session start/end no longer wait for Voltra power commands; display power work runs in a background best-effort job after the financial/session state is committed.
+- Station power state is read from one Voltra overview request instead of one HTTP request per station.
+- Removes the active-session and dashboard N+1 query patterns by loading active sessions in bulk and using SQL counts.
+- Timed-session snapshots include a server timestamp and continue counting down smoothly in the browser between server refreshes.
+- API version is **0.23.0** and frontend assets are cache-busted to v0.23.
+
+### v0.23 validation
+Local regression testing covered ROOT login/activation, OPEN and TIMED start/end, pause/resume, timed extension, automatic expiry, payment/end flow, and the optimized station refresh path. A simulated 1.2-second Voltra delay remained off the cashier action critical path.
 
 ## v0.22 hotfix
 - Fixes the blank/dark-screen React crash when a TIMED session becomes visible.
