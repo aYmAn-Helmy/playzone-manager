@@ -1,10 +1,18 @@
 # PlayZone Manager
 
-Current deployment baseline: **v0.17**.
+Current deployment baseline: **v0.20**.
 
 PlayZone Manager is the cashier/session-management application with embedded Voltra screen-power management.
 
-## v0.17 highlights
+## v0.20 connectivity
+- Private Tailscale transport for the real Voltra TCP/10086 listener on Railway.
+- LAN relay for strip firmware that can only accept an IPv4 server address and fixed TCP/10086.
+- Windows relay launcher with LocalSubnet-only firewall option.
+- Tailscale failure is non-blocking so billing/session operation remains independent of Voltra connectivity.
+
+See `TAILSCALE_VOLTRA.md` for deployment and validation.
+
+## Core features
 - Open sessions and timed sessions with configurable presets.
 - Timed-session countdown, pause/resume freeze, extension, expiry warnings, and optional stop-and-wait-for-payment mode.
 - ROOT-managed payment methods: Cash, InstaPay, Visa.
