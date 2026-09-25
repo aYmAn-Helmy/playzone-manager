@@ -23,7 +23,7 @@ LAN relay PC
     v
 playzone-railway tailnet node :10086
     |
-    | tailscale serve TCP forwarder
+    | userspace-networking inbound proxy
     v
 127.0.0.1:10086 (embedded Voltra listener)
 ```
@@ -32,14 +32,14 @@ The strip never needs Tailscale. It only sees the relay PC's normal LAN IPv4.
 
 ## 1. Railway / PlayZone side
 
-The PlayZone Docker image now installs the Tailscale client. On startup,
-`start-staging.sh` starts `tailscaled` in userspace networking mode when
-`TS_AUTHKEY` is present, joins the tailnet, and publishes the embedded Voltra
-listener privately with:
+The PlayZone Docker image installs the Tailscale client. On startup,
+`start-staging.sh` starts `tailscaled` in userspace-networking mode when
+`TS_AUTHKEY` is present and joins the tailnet.
 
-```text
-tailscale serve --tcp=10086 tcp://127.0.0.1:10086
-```
+In Tailscale userspace-networking mode, inbound tailnet connections are proxied
+to the same port on `127.0.0.1`. Therefore a connection to the PlayZone
+Tailscale node on TCP/10086 reaches the embedded Voltra listener on
+`127.0.0.1:10086` without exposing that port publicly.
 
 If Tailscale fails, PlayZone still starts. Billing/session operations therefore
 remain independent of Voltra connectivity.
@@ -65,8 +65,8 @@ Create the auth key from the Tailscale admin console. A tagged key is preferred
 for a server workload. Keep the key only in Railway secrets; do not commit it
 to Git.
 
-Tailscale Serve must be enabled for the tailnet. Access rules should allow only
-the LAN relay device (or relay tag) to reach the PlayZone node on TCP/10086.
+Tailnet access rules should allow only the LAN relay device (or relay tag) to
+reach the PlayZone node on TCP/10086.
 
 ## 2. LAN relay PC
 
@@ -157,12 +157,13 @@ in the Voltra management flow in PlayZone.
 On Railway, successful startup prints:
 
 ```text
-Tailscale Voltra endpoint enabled on private TCP 10086.
+Tailscale connected. Userspace networking will forward inbound tailnet TCP/10086 to localhost:10086.
+Private Voltra endpoint: 100.x.y.z:10086
 ```
 
-If Railway prints that it joined the tailnet but could not publish TCP/10086,
-check whether Tailscale Serve is enabled for the tailnet and whether the
-PlayZone node is authorized.
+If Tailscale does not authenticate, PlayZone continues running but the private
+Voltra path is unavailable. Check the Railway `TS_AUTHKEY`, Tailscale device
+authorization, persisted state, and tailnet access rules.
 
 ## 5. Production notes
 
