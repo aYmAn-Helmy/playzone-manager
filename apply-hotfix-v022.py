@@ -1,7 +1,16 @@
 from pathlib import Path
 
 PLAYZONE = Path('/app/playzone')
+MAIN = PLAYZONE / 'backend' / 'app' / 'main.py'
 DIST = PLAYZONE / 'frontend' / 'dist' / 'assets'
+
+backend = MAIN.read_text(encoding='utf-8')
+backend = backend.replace(
+    'app = FastAPI(title="PlayZone Manager API", version="0.21.0")',
+    'app = FastAPI(title="PlayZone Manager API", version="0.22.0")',
+    1,
+)
+MAIN.write_text(backend, encoding='utf-8')
 
 js_files = list(DIST.glob('*.js'))
 if len(js_files) != 1:
