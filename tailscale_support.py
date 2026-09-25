@@ -138,7 +138,18 @@ def get_status() -> dict:
     ips = self_node.get("TailscaleIPs") or []
     ipv4 = next((ip for ip in ips if isinstance(ip, str) and ":" not in ip), None)
     online = bool(self_node.get("Online"))
-    always_on = base["service_state"] == "RUNNING" and backend_state.lower() not in {"needslogin", "nostate"}
+
+    # ForceDaemon is the Windows preference behind Tailscale Run Unattended.
+    # Read it directly so the ROOT page reports Always-On accurately.
+    force_daemon = False
+    prefs_proc = _run(exe, ["debug", "prefs"], timeout=8)
+    if prefs_proc.returncode == 0:
+        try:
+            prefs = json.loads(prefs_proc.stdout or "{}")
+            force_daemon = bool(prefs.get("ForceDaemon"))
+        except json.JSONDecodeError:
+            force_daemon = False
+    always_on = force_daemon and base["service_state"] == "RUNNING"
 
     base.update(
         {
