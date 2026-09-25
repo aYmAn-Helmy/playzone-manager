@@ -7,9 +7,59 @@ export PLAYZONE_DB_PATH="${PLAYZONE_DB_PATH:-/tmp/playzone-data/playzone.db}"
 export VOLTRA_BASE_URL="http://127.0.0.1:8086"
 export VOLTRA_EMBEDDED=1
 export VOLTRA_DEMO="${VOLTRA_DEMO:-1}"
-export VOLTRA_TCP_PORT=10086
-export VOLTRA_HTTP_PORT=8086
+export VOLTRA_TCP_PORT="${VOLTRA_TCP_PORT:-10086}"
+export VOLTRA_HTTP_PORT="${VOLTRA_HTTP_PORT:-8086}"
 export VOLTRA_DATA_PATH="${VOLTRA_DATA_PATH:-/tmp/playzone-data/voltra.json}"
+
+start_tailscale() {
+    if [ -z "${TS_AUTHKEY:-}" ]; then
+        echo "Tailscale disabled: TS_AUTHKEY is not set."
+        return 0
+    fi
+
+    ts_state_dir="${TS_STATE_DIR:-/tmp/tailscale}"
+    ts_socket="${TS_SOCKET:-/tmp/tailscale/tailscaled.sock}"
+    ts_hostname="${TS_HOSTNAME:-playzone-railway}"
+    mkdir -p "$ts_state_dir" "$(dirname "$ts_socket")"
+
+    echo "Starting Tailscale in userspace mode as $ts_hostname..."
+    tailscaled \
+        --tun=userspace-networking \
+        --socket="$ts_socket" \
+        --state="$ts_state_dir/tailscaled.state" \
+        >"$ts_state_dir/tailscaled.log" 2>&1 &
+
+    i=0
+    while [ "$i" -lt 30 ]; do
+        if tailscale --socket="$ts_socket" up \
+            --auth-key="$TS_AUTHKEY" \
+            --hostname="$ts_hostname" \
+            --accept-dns=false >/dev/null 2>&1; then
+            break
+        fi
+        i=$((i + 1))
+        sleep 1
+    done
+
+    if [ "$i" -ge 30 ]; then
+        echo "WARNING: Tailscale did not authenticate; PlayZone will continue without the private Voltra tunnel."
+        return 0
+    fi
+
+    if tailscale --socket="$ts_socket" serve --yes --bg \
+        --tcp="$VOLTRA_TCP_PORT" \
+        "tcp://127.0.0.1:$VOLTRA_TCP_PORT" >/dev/null 2>&1; then
+        echo "Tailscale Voltra endpoint enabled on private TCP $VOLTRA_TCP_PORT."
+        tailscale --socket="$ts_socket" status --self=true 2>/dev/null || true
+    else
+        echo "WARNING: Tailscale joined the tailnet but could not publish TCP $VOLTRA_TCP_PORT with Tailscale Serve."
+        echo "Check that Tailscale Serve is allowed for this tailnet."
+    fi
+}
+
+# Tailscale is intentionally non-blocking. Billing/session operation remains
+# available even if the private Voltra transport cannot be established.
+start_tailscale &
 
 # Staging/demo helper: wait for embedded Voltra, sync six stations, adopt the
 # demo strip, then map PS4-01..04 to the demo outlets. This never targets real
