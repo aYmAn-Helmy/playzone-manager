@@ -21,6 +21,10 @@ RUN python /app/apply-tailscale-v021.py
 COPY apply-hotfix-v022.py /app/apply-hotfix-v022.py
 RUN python /app/apply-hotfix-v022.py
 
+COPY v023_patch.zlib.b64 /app/v023_patch.zlib.b64
+RUN python -c "import base64,zlib,pathlib; p=pathlib.Path('/app/v023_patch.zlib.b64'); pathlib.Path('/app/apply-performance-v023.py').write_bytes(zlib.decompress(base64.b64decode(p.read_text().strip())))" \
+    && python /app/apply-performance-v023.py
+
 RUN pip install --no-cache-dir -r /app/playzone/backend/requirements.txt
 
 COPY start-staging.sh /app/start-staging.sh
