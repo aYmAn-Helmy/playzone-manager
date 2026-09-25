@@ -18,6 +18,9 @@ COPY tailscale_support.py /app/playzone/backend/app/tailscale_support.py
 COPY apply-tailscale-v021.py /app/apply-tailscale-v021.py
 RUN python /app/apply-tailscale-v021.py
 
+COPY apply-hotfix-v022.py /app/apply-hotfix-v022.py
+RUN python /app/apply-hotfix-v022.py
+
 RUN pip install --no-cache-dir -r /app/playzone/backend/requirements.txt
 
 COPY start-staging.sh /app/start-staging.sh

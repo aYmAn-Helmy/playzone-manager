@@ -1,8 +1,14 @@
 # PlayZone Manager
 
-Current deployment baseline: **v0.21**.
+Current deployment baseline: **v0.22**.
 
 PlayZone Manager is the cashier/session-management application with embedded Voltra screen-power management.
+
+## v0.22 hotfix
+- Fixes the blank/dark-screen React crash when a TIMED session becomes visible.
+- Corrects the `+ وقت` timer icon to render the Lucide React component instead of the raw icon definition object.
+- Cache-busts frontend assets to `index-v022.js` / `index-v022.css`.
+- No billing, session-total, Voltra, or Tailscale behavior is changed by this hotfix.
 
 ## v0.21 highlights
 - ROOT-only Always-On Tailscale remote-support status and reconnect control.
