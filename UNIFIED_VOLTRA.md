@@ -30,10 +30,13 @@ The relay PC is on the same LAN as the strips. The strips are provisioned with
 the relay PC's ordinary LAN IPv4 address, while the relay forwards raw TCP over
 Tailscale to the private PlayZone endpoint.
 
-On Railway, `start-staging.sh` starts Tailscale in userspace mode when
-`TS_AUTHKEY` is configured and exposes the embedded listener privately with a
-Tailscale TCP forwarder. If Tailscale is unavailable, PlayZone still starts and
-billing/session operations continue normally.
+On Railway, `start-staging.sh` starts Tailscale in userspace-networking mode
+when `TS_AUTHKEY` is configured. In that mode, inbound tailnet connections are
+proxied to the same port on `127.0.0.1`, so tailnet TCP/10086 reaches the
+embedded Voltra listener on `127.0.0.1:10086`.
+
+If Tailscale is unavailable, PlayZone still starts and billing/session
+operations continue normally.
 
 See `TAILSCALE_VOLTRA.md` for Railway variables, relay setup, Windows/Linux
 commands, strip provisioning, and validation steps.
