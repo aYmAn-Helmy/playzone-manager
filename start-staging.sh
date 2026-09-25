@@ -46,14 +46,10 @@ start_tailscale() {
         return 0
     fi
 
-    if tailscale --socket="$ts_socket" serve --yes --bg \
-        --tcp="$VOLTRA_TCP_PORT" \
-        "tcp://127.0.0.1:$VOLTRA_TCP_PORT" >/dev/null 2>&1; then
-        echo "Tailscale Voltra endpoint enabled on private TCP $VOLTRA_TCP_PORT."
-        tailscale --socket="$ts_socket" status --self=true 2>/dev/null || true
-    else
-        echo "WARNING: Tailscale joined the tailnet but could not publish TCP $VOLTRA_TCP_PORT with Tailscale Serve."
-        echo "Check that Tailscale Serve is allowed for this tailnet."
+    ts_ip="$(tailscale --socket="$ts_socket" ip -4 2>/dev/null || true)"
+    echo "Tailscale connected. Userspace networking will forward inbound tailnet TCP/$VOLTRA_TCP_PORT to localhost:$VOLTRA_TCP_PORT."
+    if [ -n "$ts_ip" ]; then
+        echo "Private Voltra endpoint: $ts_ip:$VOLTRA_TCP_PORT"
     fi
 }
 
