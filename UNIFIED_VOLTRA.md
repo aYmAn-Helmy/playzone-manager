@@ -14,12 +14,29 @@ PlayZone and Voltra now run as one application/service.
 
 ## Real strip connectivity
 
-The current provisioning protocol sends only the server IPv4 address to the strip and the strip connects on TCP port 10086.
+The current provisioning protocol sends only a server IPv4 address to the strip
+and the strip connects on TCP port 10086.
 
-Therefore a real Internet host must expose inbound TCP 10086 on a public IPv4 address. Railway can proxy internal TCP 10086, but its public TCP proxy uses a Railway-assigned external port that cannot be fixed to 10086. Railway is suitable for online UI/demo testing, but not for direct connectivity from this strip firmware unless the firmware/provisioning protocol is changed to support a custom server port.
+Railway's public TCP proxy cannot guarantee an external port of 10086, so the
+strip should not connect directly to Railway.
 
-For a real test use a host/VPS with:
-- public IPv4
-- TCP 10086 allowed inbound
-- HTTP/HTTPS for PlayZone
-- the same Docker image/runtime
+The v0.20 connectivity path uses Tailscale plus a small LAN relay:
+
+```text
+Voltra strip -> LAN relay IPv4:10086 -> Tailscale -> Railway PlayZone:10086
+```
+
+The relay PC is on the same LAN as the strips. The strips are provisioned with
+the relay PC's ordinary LAN IPv4 address, while the relay forwards raw TCP over
+Tailscale to the private PlayZone endpoint.
+
+On Railway, `start-staging.sh` starts Tailscale in userspace-networking mode
+when `TS_AUTHKEY` is configured. In that mode, inbound tailnet connections are
+proxied to the same port on `127.0.0.1`, so tailnet TCP/10086 reaches the
+embedded Voltra listener on `127.0.0.1:10086`.
+
+If Tailscale is unavailable, PlayZone still starts and billing/session
+operations continue normally.
+
+See `TAILSCALE_VOLTRA.md` for Railway variables, relay setup, Windows/Linux
+commands, strip provisioning, and validation steps.
