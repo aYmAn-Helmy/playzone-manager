@@ -62,7 +62,6 @@ from .edge_commands import start_cloud_command_runtime, stop_cloud_command_runti
         raise HTTPException(403, "Root role required")
     return user
 
-
 """
     root_routes = root_anchor + """@app.get("/api/root/edge/status")
 def api_edge_status(_: User = Depends(root_ready_user)):
