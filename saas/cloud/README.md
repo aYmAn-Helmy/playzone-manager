@@ -31,3 +31,11 @@ First isolated SaaS foundation for PlayZone Manager. It is intentionally separat
 6. Customer users sign in with their customer code and only receive that tenant's data.
 
 This milestone does **not** replace the current PlayZone Manager v0.27 cashier/Voltra runtime yet. The next milestone connects the local Edge runtime and offline event queue to these APIs.
+
+
+## Edge transition status
+
+The transitional v0.27 bridge is kept under `saas/edge/integration/v027_edge_runtime.py`.
+It copies only **committed** local audit actions into a durable Edge outbox, uses deterministic
+`audit-<id>` event IDs, and keeps cloud sync completely off the cashier transaction path.
+Customer Windows builds protect the Edge device token with machine-scoped Windows DPAPI.
