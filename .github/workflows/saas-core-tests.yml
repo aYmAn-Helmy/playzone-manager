@@ -1,0 +1,39 @@
+name: SaaS core tests
+
+on:
+  push:
+    branches: [saas-v1]
+    paths:
+      - "saas/**"
+      - ".github/workflows/saas-core-tests.yml"
+  pull_request:
+    paths:
+      - "saas/**"
+      - ".github/workflows/saas-core-tests.yml"
+
+jobs:
+  cloud:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: saas/cloud
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: PYTHONPATH=. pytest -q
+
+  edge:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: saas/edge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: PYTHONPATH=. pytest -q
