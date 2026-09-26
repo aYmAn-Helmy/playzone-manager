@@ -48,6 +48,28 @@ def _init_command_table() -> None:
         )
 
 
+def _reserve_command(command_id: str) -> bool:
+    """Persist execution intent before touching PlayZone business state.
+
+    This makes remote commands at-most-once across process crashes. If the
+    process dies after reservation but before a terminal result is stored, the
+    command is never replayed automatically; Cloud receives an explicit
+    uncertain/failed result instead of risking a duplicate financial action.
+    """
+    _init_command_table()
+    with _connect() as conn:
+        try:
+            conn.execute(
+                "INSERT INTO processed_cloud_commands(command_id,status,result_json,error,processed_at) "
+                "VALUES(?,?,?,?,?)",
+                (command_id, "PROCESSING", "{}", None, _utc_iso()),
+            )
+            conn.commit()
+            return True
+        except Exception:
+            return False
+
+
 def _load_processed(command_id: str) -> dict[str, Any] | None:
     _init_command_table()
     with _connect() as conn:
@@ -124,7 +146,19 @@ def execute_command(command: dict[str, Any]) -> dict[str, Any]:
 
     previous = _load_processed(command_id)
     if previous is not None:
+        if previous["status"] == "PROCESSING":
+            # A previous process reserved the command but did not persist a
+            # terminal result. Never replay an operation such as EXTEND_SESSION.
+            error = "COMMAND_EXECUTION_UNCERTAIN_AFTER_RESTART"
+            _store_processed(command_id, "FAILED", {}, error)
+            return {"id": command_id, "status": "FAILED", "result": {}, "error": error}
         return previous
+
+    if not _reserve_command(command_id):
+        previous = _load_processed(command_id)
+        if previous is not None:
+            return previous
+        raise RuntimeError("Could not reserve cloud command")
 
     try:
         with SessionLocal() as db:
