@@ -7,6 +7,7 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.responses import HTMLResponse
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -23,6 +24,7 @@ from .schemas import (
     TenantCreate,
 )
 from .security import future, hash_password, new_secret, not_expired, secret_hash, utcnow, verify_password
+from .webui import CUSTOMER_PORTAL_HTML, PLATFORM_ADMIN_HTML
 
 APP_VERSION = "saas-v1.0"
 USER_TOKEN_HOURS = 12
@@ -130,6 +132,16 @@ def current_edge(
     if not tenant or tenant.status != "ACTIVE":
         raise HTTPException(status_code=403, detail="customer account inactive")
     return edge
+
+
+@app.get("/", response_class=HTMLResponse)
+def customer_portal() -> HTMLResponse:
+    return HTMLResponse(CUSTOMER_PORTAL_HTML)
+
+
+@app.get("/platform", response_class=HTMLResponse)
+def platform_dashboard() -> HTMLResponse:
+    return HTMLResponse(PLATFORM_ADMIN_HTML)
 
 
 @app.get("/health")
