@@ -14,8 +14,10 @@ from sqlalchemy.orm import Session
 
 from .db import get_db, init_db
 from .materializer import apply_edge_event
-from .models import Branch, CloudInvoice, CloudSession, CloudStation, CloudUser, EdgeDevice, EdgeEvent, InstallationCode, Tenant, UserToken
+from .models import Branch, CloudCommand, CloudInvoice, CloudSession, CloudStation, CloudUser, EdgeDevice, EdgeEvent, InstallationCode, Tenant, UserToken
 from .schemas import (
+    CloudCommandAck,
+    CloudCommandCreate,
     CustomerUserCreate,
     EdgeActivateRequest,
     EdgeEventsRequest,
@@ -123,6 +125,12 @@ def require_customer_user(user: Annotated[CloudUser, Depends(current_user)]) -> 
 def require_customer_owner(user: Annotated[CloudUser, Depends(current_user)]) -> CloudUser:
     if user.tenant_id is None or user.role != "OWNER":
         raise HTTPException(status_code=403, detail="customer owner required")
+    return user
+
+
+def require_customer_manager(user: Annotated[CloudUser, Depends(current_user)]) -> CloudUser:
+    if user.tenant_id is None or user.role not in {"OWNER", "MANAGER"}:
+        raise HTTPException(status_code=403, detail="customer manager required")
     return user
 
 
@@ -462,6 +470,119 @@ def reset_customer_user_password(
     return {"ok": True, "id": item.id}
 
 
+def _validate_cloud_command(command_type: str, payload: dict) -> dict:
+    clean = dict(payload or {})
+    if command_type in {"POWER_ON", "POWER_OFF"}:
+        try:
+            station_id = int(clean.get("station_id"))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="station_id is required")
+        if station_id < 1:
+            raise HTTPException(status_code=422, detail="invalid station_id")
+        return {"station_id": station_id}
+
+    session_ref = str(clean.get("session_ref") or "").strip()
+    if not session_ref:
+        raise HTTPException(status_code=422, detail="session_ref is required")
+    if command_type == "EXTEND_SESSION":
+        try:
+            seconds = int(clean.get("seconds"))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="seconds is required")
+        if seconds < 60 or seconds > 86400:
+            raise HTTPException(status_code=422, detail="seconds must be between 60 and 86400")
+        return {"session_ref": session_ref, "seconds": seconds}
+    if command_type == "CHANGE_CONTROLLERS":
+        try:
+            controller_count = int(clean.get("controller_count"))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="controller_count is required")
+        if controller_count not in {2, 3, 4}:
+            raise HTTPException(status_code=422, detail="controller_count must be 2, 3 or 4")
+        return {"session_ref": session_ref, "controller_count": controller_count}
+    if command_type in {"PAUSE_SESSION", "RESUME_SESSION"}:
+        return {"session_ref": session_ref}
+    raise HTTPException(status_code=422, detail="unsupported command")
+
+
+@app.post("/api/customer/commands", status_code=status.HTTP_201_CREATED)
+def create_cloud_command(
+    body: CloudCommandCreate,
+    manager: Annotated[CloudUser, Depends(require_customer_manager)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    query = select(EdgeDevice).where(
+        EdgeDevice.tenant_id == manager.tenant_id,
+        EdgeDevice.status == "ACTIVE",
+        EdgeDevice.revoked_at.is_(None),
+    )
+    if body.edge_device_id:
+        query = query.where(EdgeDevice.id == body.edge_device_id)
+        edge = db.scalar(query)
+    else:
+        edges = db.scalars(query.order_by(EdgeDevice.registered_at)).all()
+        if not edges:
+            raise HTTPException(status_code=409, detail="no active edge device")
+        if len(edges) > 1:
+            raise HTTPException(status_code=422, detail="edge_device_id is required when more than one edge is active")
+        edge = edges[0]
+    if not edge:
+        raise HTTPException(status_code=404, detail="edge device not found")
+
+    clean_payload = _validate_cloud_command(body.command_type, body.payload)
+    command = CloudCommand(
+        id="CMD-" + secrets.token_hex(12).upper(),
+        tenant_id=manager.tenant_id,
+        branch_id=edge.branch_id,
+        edge_device_id=edge.id,
+        created_by_user_id=manager.id,
+        command_type=body.command_type,
+        payload=clean_payload,
+        status="PENDING",
+    )
+    db.add(command)
+    db.commit()
+    return {
+        "id": command.id,
+        "edge_device_id": command.edge_device_id,
+        "command_type": command.command_type,
+        "payload": command.payload,
+        "status": command.status,
+        "created_at": command.created_at,
+    }
+
+
+@app.get("/api/customer/commands")
+def list_cloud_commands(
+    manager: Annotated[CloudUser, Depends(require_customer_manager)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    rows = db.scalars(
+        select(CloudCommand)
+        .where(CloudCommand.tenant_id == manager.tenant_id)
+        .order_by(CloudCommand.created_at.desc())
+        .limit(100)
+    ).all()
+    return {
+        "commands": [
+            {
+                "id": item.id,
+                "edge_device_id": item.edge_device_id,
+                "command_type": item.command_type,
+                "payload": item.payload,
+                "status": item.status,
+                "delivery_count": item.delivery_count,
+                "created_at": item.created_at,
+                "delivered_at": item.delivered_at,
+                "acknowledged_at": item.acknowledged_at,
+                "result": item.result,
+                "error": item.error,
+            }
+            for item in rows
+        ]
+    }
+
+
 @app.post("/api/edge/activate", status_code=status.HTTP_201_CREATED)
 def activate_edge(body: EdgeActivateRequest, db: Annotated[Session, Depends(get_db)]) -> dict:
     code = db.scalar(select(InstallationCode).where(InstallationCode.code_hash == secret_hash(body.installation_code)))
@@ -530,6 +651,64 @@ def edge_config(
         "edge": {"id": edge.id, "device_name": edge.device_name},
         "sync": {"max_batch_events": 500},
     }
+
+
+@app.get("/api/edge/commands")
+def edge_commands(
+    edge: Annotated[EdgeDevice, Depends(current_edge)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    rows = db.scalars(
+        select(CloudCommand)
+        .where(
+            CloudCommand.edge_device_id == edge.id,
+            CloudCommand.status == "PENDING",
+        )
+        .order_by(CloudCommand.created_at)
+        .limit(50)
+    ).all()
+    now = utcnow()
+    for item in rows:
+        item.delivery_count += 1
+        item.delivered_at = now
+    managed = db.get(EdgeDevice, edge.id)
+    managed.last_seen_at = now
+    db.commit()
+    return {
+        "commands": [
+            {
+                "id": item.id,
+                "command_type": item.command_type,
+                "payload": item.payload,
+                "created_at": item.created_at,
+                "delivery_count": item.delivery_count,
+            }
+            for item in rows
+        ]
+    }
+
+
+@app.post("/api/edge/commands/{command_id}/ack")
+def acknowledge_edge_command(
+    command_id: str,
+    body: CloudCommandAck,
+    edge: Annotated[EdgeDevice, Depends(current_edge)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    item = db.get(CloudCommand, command_id)
+    if not item or item.edge_device_id != edge.id:
+        raise HTTPException(status_code=404, detail="command not found")
+    # Idempotent ACK: once terminal, repeated acknowledgements return existing state.
+    if item.status in {"SUCCESS", "FAILED"}:
+        return {"id": item.id, "status": item.status}
+    item.status = body.status
+    item.result = body.result
+    item.error = body.error if body.status == "FAILED" else None
+    item.acknowledged_at = utcnow()
+    managed = db.get(EdgeDevice, edge.id)
+    managed.last_seen_at = utcnow()
+    db.commit()
+    return {"id": item.id, "status": item.status}
 
 
 @app.post("/api/edge/events")
