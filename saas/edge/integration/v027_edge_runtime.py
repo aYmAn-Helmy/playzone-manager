@@ -478,3 +478,35 @@ def stop_edge_runtime() -> None:
     _SYNC_THREAD = None
     if thread and thread.is_alive():
         thread.join(timeout=2.0)
+
+
+def cli_main() -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="playzone-edge", description="PlayZone Manager Edge utility")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    activate_parser = sub.add_parser("activate", help="Link this PC to PlayZone Manager Cloud")
+    activate_parser.add_argument("--cloud-url", required=True)
+    activate_parser.add_argument("--installation-code", required=True)
+
+    sub.add_parser("status", help="Show Edge activation/sync status")
+    sub.add_parser("sync", help="Run one Cloud sync attempt")
+
+    args = parser.parse_args()
+    try:
+        if args.command == "activate":
+            result = activate(args.cloud_url, args.installation_code)
+        elif args.command == "sync":
+            result = sync_once()
+        else:
+            result = status()
+        print(json.dumps(result, ensure_ascii=False, default=str))
+        return 0
+    except Exception as exc:
+        print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False))
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(cli_main())
