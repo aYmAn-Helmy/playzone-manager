@@ -52,7 +52,7 @@ jobs:
       - run: dotnet restore
       - run: dotnet build -c Release --no-restore
       - run: dotnet restore -r win-x64
-      - run: dotnet publish -c Release -r win-x64 --self-contained false --no-restore -o publish
+      - run: dotnet publish -c Release -r win-x64 --self-contained true --no-restore -o publish
       - name: Validate installer PowerShell syntax
         working-directory: ${{ github.workspace }}
         shell: pwsh
@@ -70,5 +70,5 @@ jobs:
           if ($failed) { exit 1 }
       - uses: actions/upload-artifact@v4
         with:
-          name: PlayZoneManager-Desktop-win-x64
+          name: PlayZoneManager-Desktop-win-x64-selfcontained
           path: saas/desktop/PlayZoneManager.Desktop/publish/**
