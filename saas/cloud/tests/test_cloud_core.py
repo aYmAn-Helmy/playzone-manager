@@ -122,10 +122,69 @@ def test_tenant_device_and_event_isolation(tmp_path):
         assert second.status_code == 200
         assert second.json()["duplicates"] == ["evt-00000001"]
 
+        live_a = client.get("/api/customer/overview", headers=owner_a).json()
+        assert len(live_a["active_sessions"]) == 1
+        assert live_a["active_sessions"][0]["status"] == "RUNNING"
+        assert live_a["active_sessions"][0]["controller_count"] == 2
+
+        change = {
+            "event_id": "evt-00000002",
+            "sequence": 2,
+            "event_type": "CONTROLLERS_CHANGED",
+            "session_ref": "local-session-1",
+            "occurred_at": datetime.now(timezone.utc).isoformat(),
+            "payload": {
+                "station_id": 1,
+                "station_code": "PS4-01",
+                "controller_count": 3,
+                "details": {"from": "2", "to": "3"},
+            },
+        }
+        changed = client.post("/api/edge/events", headers=edge_headers, json={"events": [change]})
+        assert changed.status_code == 200, changed.text
+        changed_overview = client.get("/api/customer/overview", headers=owner_a).json()
+        assert changed_overview["active_sessions"][0]["controller_count"] == 3
+
+        invoice = {
+            "event_id": "evt-00000003",
+            "sequence": 3,
+            "event_type": "SESSION_INVOICED",
+            "session_ref": "local-session-1",
+            "occurred_at": datetime.now(timezone.utc).isoformat(),
+            "payload": {
+                "invoice_id": 77,
+                "invoice_number": "INV-TEST-0001",
+                "session_id": 1,
+                "station_id": 1,
+                "station_code": "PS4-01",
+                "amount_piasters": 9000,
+                "gameplay_amount_piasters": 9000,
+                "base_gameplay_amount_piasters": 6000,
+                "multi_amount_piasters": 3000,
+                "multi_3_seconds": 1200,
+                "multi_3_amount_piasters": 1000,
+                "multi_4_seconds": 1200,
+                "multi_4_amount_piasters": 2000,
+                "products_amount_piasters": 0,
+                "discount_piasters": 0,
+                "payment_method": "CASH",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            },
+        }
+        invoiced = client.post("/api/edge/events", headers=edge_headers, json={"events": [invoice]})
+        assert invoiced.status_code == 200, invoiced.text
+
         after_a = client.get("/api/customer/overview", headers=owner_a).json()
         after_b = client.get("/api/customer/overview", headers=owner_b).json()
-        assert after_a["received_events"] == 1
+        assert after_a["received_events"] == 3
+        assert after_a["active_sessions"] == []
+        assert after_a["sales_summary"]["invoice_count"] == 1
+        assert after_a["sales_summary"]["sales_piasters"] == 9000
+        assert after_a["sales_summary"]["multi_revenue_piasters"] == 3000
+        assert after_a["sales_summary"]["multi_3_seconds"] == 1200
+        assert after_a["sales_summary"]["multi_4_seconds"] == 1200
         assert after_b["received_events"] == 0
+        assert after_b["sales_summary"]["invoice_count"] == 0
 
         revoke = client.post(f"/api/admin/edge-devices/{edge['device_id']}/revoke", headers=admin)
         assert revoke.status_code == 200
