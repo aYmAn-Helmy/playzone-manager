@@ -18,6 +18,7 @@ def patch_main_text(s: str) -> str:
     stop_edge_runtime,
     sync_once as edge_sync_once,
 )
+from .edge_commands import start_cloud_command_runtime, stop_cloud_command_runtime
 """
     if "from .edge_runtime import (" not in s:
         if import_anchor not in s:
@@ -34,6 +35,7 @@ def patch_main_text(s: str) -> str:
     start_embedded_voltra()
     start_timed_session_monitor()
     start_edge_runtime()
+    start_cloud_command_runtime()
 """
     if "    start_edge_runtime()" not in s:
         if startup_old not in s:
@@ -45,6 +47,7 @@ def patch_main_text(s: str) -> str:
     stop_embedded_voltra()
 """
     shutdown_new = """def on_shutdown():
+    stop_cloud_command_runtime()
     stop_edge_runtime()
     stop_timed_session_monitor()
     stop_embedded_voltra()
@@ -134,14 +137,18 @@ def apply(target: Path) -> None:
         raise RuntimeError(f"Missing {main_path}")
 
     runtime_source = Path(__file__).with_name("v027_edge_runtime.py")
+    commands_source = Path(__file__).with_name("v027_edge_commands.py")
     if not runtime_source.exists():
         raise RuntimeError(f"Missing {runtime_source}")
+    if not commands_source.exists():
+        raise RuntimeError(f"Missing {commands_source}")
 
     current = main_path.read_text(encoding="utf-8")
     patched = patch_main_text(current)
     main_path.write_text(patched, encoding="utf-8")
     shutil.copy2(runtime_source, target / "backend" / "app" / "edge_runtime.py")
-    print(f"Edge runtime integrated into {target}")
+    shutil.copy2(commands_source, target / "backend" / "app" / "edge_commands.py")
+    print(f"Edge runtime + cloud command worker integrated into {target}")
 
 
 def main() -> None:
