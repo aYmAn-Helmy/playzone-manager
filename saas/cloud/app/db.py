@@ -20,6 +20,8 @@ DATABASE_URL = normalize_database_url(os.getenv("DATABASE_URL", "sqlite:///./pla
 CONNECT_ARGS = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 engine = create_engine(DATABASE_URL, pool_pre_ping=True, connect_args=CONNECT_ARGS)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+DATABASE_BACKEND = "postgresql" if DATABASE_URL.startswith("postgresql") else "sqlite"
+DATABASE_DURABLE = DATABASE_BACKEND == "postgresql" or os.getenv("PLAYZONE_SQLITE_PERSISTENT", "").lower() in {"1", "true", "yes", "on"}
 
 
 def init_db() -> None:
