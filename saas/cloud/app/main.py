@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .db import get_db, init_db
+from .db import DATABASE_BACKEND, DATABASE_DURABLE, get_db, init_db
 from .materializer import apply_edge_event
 from .models import Branch, CloudCommand, CloudInvoice, CloudSession, CloudStation, CloudUser, EdgeDevice, EdgeEvent, InstallationCode, Tenant, UserToken
 from .schemas import (
@@ -165,7 +165,7 @@ def platform_dashboard() -> HTMLResponse:
 
 @app.get("/health")
 def health() -> dict:
-    return {"ok": True, "service": "playzone-cloud", "version": APP_VERSION}
+    return {"ok": True, "service": "playzone-cloud", "version": APP_VERSION, "database_backend": DATABASE_BACKEND, "durable_storage": DATABASE_DURABLE}
 
 
 @app.post("/api/auth/login")
