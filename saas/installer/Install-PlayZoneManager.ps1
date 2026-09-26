@@ -1,6 +1,9 @@
 #Requires -RunAsAdministrator
 param(
-    [string]$BundleRoot = (Split-Path -Parent $MyInvocation.MyCommand.Path)
+    [string]$BundleRoot = (Split-Path -Parent $MyInvocation.MyCommand.Path),
+    [string]$CloudUrl = '',
+    [string]$InstallationCode = '',
+    [switch]$SkipCloudActivation
 )
 
 $ErrorActionPreference = 'Stop'
@@ -31,6 +34,33 @@ if (Test-Path $Setup) {
     try {
         & cmd.exe /c '"Setup-Portable.bat"'
         if ($LASTEXITCODE -ne 0) { throw "Portable runtime setup failed with exit code $LASTEXITCODE" }
+    } finally {
+        Pop-Location
+    }
+}
+
+$Python = Join-Path $RuntimeDest '.runtime\python\python.exe'
+if (-not (Test-Path $Python)) { throw "Portable Python runtime missing after setup: $Python" }
+
+$env:PLAYZONE_DB_PATH = Join-Path $DataRoot 'playzone.db'
+$env:PLAYZONE_EDGE_DB_PATH = Join-Path $DataRoot 'edge.db'
+$env:PLAYZONE_EDGE_APP_VERSION = '0.28-saas-prototype'
+
+if (-not $SkipCloudActivation) {
+    if ([string]::IsNullOrWhiteSpace($CloudUrl)) {
+        $CloudUrl = Read-Host 'PlayZone Cloud URL'
+    }
+    if ([string]::IsNullOrWhiteSpace($InstallationCode)) {
+        $InstallationCode = Read-Host 'Installation Code'
+    }
+    if ([string]::IsNullOrWhiteSpace($CloudUrl) -or [string]::IsNullOrWhiteSpace($InstallationCode)) {
+        throw 'Cloud URL and Installation Code are required. Use -SkipCloudActivation only for offline lab/testing installs.'
+    }
+
+    Push-Location (Join-Path $RuntimeDest 'backend')
+    try {
+        & $Python -m app.edge_runtime activate --cloud-url $CloudUrl.TrimEnd('/') --installation-code $InstallationCode.Trim()
+        if ($LASTEXITCODE -ne 0) { throw "Edge activation failed with exit code $LASTEXITCODE" }
     } finally {
         Pop-Location
     }
