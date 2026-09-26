@@ -51,3 +51,8 @@ jobs:
           dotnet-version: "8.0.x"
       - run: dotnet restore
       - run: dotnet build -c Release --no-restore
+      - run: dotnet publish -c Release -r win-x64 --self-contained false --no-restore -o publish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PlayZoneManager-Desktop-win-x64
+          path: saas/desktop/PlayZoneManager.Desktop/publish/**
