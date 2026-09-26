@@ -19,9 +19,17 @@ from .schemas import (
     EdgeActivateRequest,
     EdgeEventsRequest,
     EdgeHeartbeatRequest,
+    CustomerUserCreate,
+    EdgeActivateRequest,
+    EdgeEventsRequest,
+    EdgeHeartbeatRequest,
     InstallationCodeCreate,
     LoginRequest,
+    PasswordChange,
     TenantCreate,
+    TenantStatusUpdate,
+    UserPasswordUpdate,
+    UserStatusUpdate,
 )
 from .security import future, hash_password, new_secret, not_expired, secret_hash, utcnow, verify_password
 from .webui import CUSTOMER_PORTAL_HTML, PLATFORM_ADMIN_HTML
@@ -115,6 +123,12 @@ def require_customer_user(user: Annotated[CloudUser, Depends(current_user)]) -> 
     return user
 
 
+def require_customer_owner(user: Annotated[CloudUser, Depends(current_user)]) -> CloudUser:
+    if user.tenant_id is None or user.role != "OWNER":
+        raise HTTPException(status_code=403, detail="customer owner required")
+    return user
+
+
 def current_edge(
     db: Annotated[Session, Depends(get_db)],
     authorization: Annotated[str | None, Header()] = None,
@@ -181,6 +195,23 @@ def me(user: Annotated[CloudUser, Depends(current_user)], db: Annotated[Session,
     }
 
 
+@app.post("/api/auth/change-password")
+def change_password(
+    body: PasswordChange,
+    user: Annotated[CloudUser, Depends(current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    managed = db.get(CloudUser, user.id)
+    if not managed or not verify_password(body.current_password, managed.password_hash):
+        raise HTTPException(status_code=401, detail="current password is incorrect")
+    managed.password_hash = hash_password(body.new_password)
+    # Revoke every existing login token after a password change.
+    for token in db.scalars(select(UserToken).where(UserToken.user_id == managed.id)).all():
+        db.delete(token)
+    db.commit()
+    return {"ok": True}
+
+
 @app.post("/api/admin/tenants", status_code=status.HTTP_201_CREATED)
 def create_tenant(
     body: TenantCreate,
@@ -212,6 +243,43 @@ def create_tenant(
         "branch": {"id": branch.id, "code": branch.code, "name": branch.name},
         "owner": _public_user(owner),
     }
+
+
+@app.put("/api/admin/tenants/{tenant_id}/status")
+def set_tenant_status(
+    tenant_id: int,
+    body: TenantStatusUpdate,
+    admin: Annotated[CloudUser, Depends(require_platform_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    tenant = db.get(Tenant, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="customer not found")
+    tenant.status = body.status
+    db.commit()
+    return {"id": tenant.id, "code": tenant.code, "status": tenant.status}
+
+
+@app.put("/api/admin/tenants/{tenant_id}/owner-password")
+def reset_owner_password(
+    tenant_id: int,
+    body: UserPasswordUpdate,
+    admin: Annotated[CloudUser, Depends(require_platform_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    owner = db.scalar(
+        select(CloudUser).where(
+            CloudUser.tenant_id == tenant_id,
+            CloudUser.role == "OWNER",
+        ).order_by(CloudUser.id)
+    )
+    if not owner:
+        raise HTTPException(status_code=404, detail="customer owner not found")
+    owner.password_hash = hash_password(body.password)
+    for token in db.scalars(select(UserToken).where(UserToken.user_id == owner.id)).all():
+        db.delete(token)
+    db.commit()
+    return {"ok": True, "owner_user_id": owner.id}
 
 
 @app.get("/api/admin/tenants")
@@ -303,6 +371,98 @@ def revoke_edge(
     edge.revoked_at = utcnow()
     db.commit()
     return {"ok": True, "device_id": edge.id, "status": edge.status}
+
+
+@app.get("/api/customer/users")
+def list_customer_users(
+    owner: Annotated[CloudUser, Depends(require_customer_owner)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    rows = db.scalars(
+        select(CloudUser)
+        .where(CloudUser.tenant_id == owner.tenant_id)
+        .order_by(CloudUser.role, func.lower(CloudUser.username))
+    ).all()
+    return {
+        "users": [
+            {
+                **_public_user(item),
+                "is_active": item.is_active,
+                "created_at": item.created_at,
+            }
+            for item in rows
+        ]
+    }
+
+
+@app.post("/api/customer/users", status_code=status.HTTP_201_CREATED)
+def create_customer_user(
+    body: CustomerUserCreate,
+    owner: Annotated[CloudUser, Depends(require_customer_owner)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    if body.role == "OWNER":
+        raise HTTPException(status_code=403, detail="only platform admin may provision the primary owner")
+    existing = db.scalar(
+        select(CloudUser).where(
+            CloudUser.tenant_id == owner.tenant_id,
+            func.lower(CloudUser.username) == body.username.strip().lower(),
+        )
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="username already exists")
+    item = CloudUser(
+        tenant_id=owner.tenant_id,
+        username=body.username.strip(),
+        display_name=body.display_name,
+        password_hash=hash_password(body.password),
+        role=body.role,
+        is_active=True,
+    )
+    db.add(item)
+    db.commit()
+    return {**_public_user(item), "is_active": item.is_active, "created_at": item.created_at}
+
+
+@app.put("/api/customer/users/{user_id}/status")
+def set_customer_user_status(
+    user_id: int,
+    body: UserStatusUpdate,
+    owner: Annotated[CloudUser, Depends(require_customer_owner)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    item = db.get(CloudUser, user_id)
+    if not item or item.tenant_id != owner.tenant_id:
+        raise HTTPException(status_code=404, detail="user not found")
+    if item.id == owner.id and not body.is_active:
+        raise HTTPException(status_code=409, detail="owner cannot disable own account")
+    if item.role == "OWNER" and item.id != owner.id:
+        raise HTTPException(status_code=403, detail="cannot manage another owner")
+    item.is_active = body.is_active
+    if not item.is_active:
+        for token in db.scalars(select(UserToken).where(UserToken.user_id == item.id)).all():
+            db.delete(token)
+    db.commit()
+    return {"id": item.id, "is_active": item.is_active}
+
+
+@app.put("/api/customer/users/{user_id}/password")
+def reset_customer_user_password(
+    user_id: int,
+    body: UserPasswordUpdate,
+    owner: Annotated[CloudUser, Depends(require_customer_owner)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    item = db.get(CloudUser, user_id)
+    if not item or item.tenant_id != owner.tenant_id:
+        raise HTTPException(status_code=404, detail="user not found")
+    if item.role == "OWNER" and item.id != owner.id:
+        raise HTTPException(status_code=403, detail="cannot manage another owner")
+    item.password_hash = hash_password(body.password)
+    for token in db.scalars(select(UserToken).where(UserToken.user_id == item.id)).all():
+        db.delete(token)
+    db.commit()
+    return {"ok": True, "id": item.id}
 
 
 @app.post("/api/edge/activate", status_code=status.HTTP_201_CREATED)
