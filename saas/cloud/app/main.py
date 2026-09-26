@@ -30,7 +30,7 @@ from .schemas import (
     UserPasswordUpdate,
     UserStatusUpdate,
 )
-from .security import future, hash_password, new_secret, not_expired, secret_hash, utcnow, verify_password
+from .security import future, hash_password, issue_signed_token, new_secret, not_expired, secret_hash, utcnow, verify_password, verify_signed_token
 from .webui import CUSTOMER_PORTAL_HTML, PLATFORM_ADMIN_HTML
 
 APP_VERSION = "saas-v1.0"
@@ -97,7 +97,24 @@ def current_user(
 ) -> CloudUser:
     if not credentials or credentials.scheme.lower() != "bearer":
         raise HTTPException(status_code=401, detail="authentication required")
-    row = db.scalar(select(UserToken).where(UserToken.token_hash == secret_hash(credentials.credentials)))
+
+    raw_token = credentials.credentials
+    auth_secret = os.getenv("PLAYZONE_AUTH_SECRET", "")
+    signed = verify_signed_token(raw_token, "platform-admin", auth_secret)
+    if signed:
+        username = str(signed["sub"])
+        user = db.scalar(
+            select(CloudUser).where(
+                CloudUser.tenant_id.is_(None),
+                CloudUser.role == "PLATFORM_ADMIN",
+                func.lower(CloudUser.username) == username.lower(),
+            )
+        )
+        if not user or not user.is_active:
+            raise HTTPException(status_code=401, detail="platform admin disabled")
+        return user
+
+    row = db.scalar(select(UserToken).where(UserToken.token_hash == secret_hash(raw_token)))
     if not row or not not_expired(row.expires_at):
         raise HTTPException(status_code=401, detail="invalid or expired token")
     user = db.get(CloudUser, row.user_id)
@@ -185,9 +202,13 @@ def login(body: LoginRequest, db: Annotated[Session, Depends(get_db)]) -> dict:
         tenant = db.get(Tenant, user.tenant_id)
         if not tenant or tenant.status != "ACTIVE":
             raise HTTPException(status_code=403, detail="customer account inactive")
-    raw = new_secret()
-    db.add(UserToken(token_hash=secret_hash(raw), user_id=user.id, expires_at=future(USER_TOKEN_HOURS)))
-    db.commit()
+    auth_secret = os.getenv("PLAYZONE_AUTH_SECRET", "")
+    if user.role == "PLATFORM_ADMIN" and user.tenant_id is None and auth_secret:
+        raw = issue_signed_token(user.username, "platform-admin", auth_secret, USER_TOKEN_HOURS)
+    else:
+        raw = new_secret()
+        db.add(UserToken(token_hash=secret_hash(raw), user_id=user.id, expires_at=future(USER_TOKEN_HOURS)))
+        db.commit()
     return {"token": raw, "token_type": "bearer", "user": _public_user(user)}
 
 
