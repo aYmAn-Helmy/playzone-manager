@@ -16,9 +16,6 @@ from .db import get_db, init_db
 from .materializer import apply_edge_event
 from .models import Branch, CloudInvoice, CloudSession, CloudStation, CloudUser, EdgeDevice, EdgeEvent, InstallationCode, Tenant, UserToken
 from .schemas import (
-    EdgeActivateRequest,
-    EdgeEventsRequest,
-    EdgeHeartbeatRequest,
     CustomerUserCreate,
     EdgeActivateRequest,
     EdgeEventsRequest,
