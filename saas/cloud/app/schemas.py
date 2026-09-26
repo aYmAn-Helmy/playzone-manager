@@ -64,3 +64,8 @@ class UserStatusUpdate(BaseModel):
 
 class TenantStatusUpdate(BaseModel):
     status: str = Field(pattern="^(ACTIVE|SUSPENDED)$")
+
+
+class PasswordChange(BaseModel):
+    current_password: str = Field(min_length=1, max_length=200)
+    new_password: str = Field(min_length=8, max_length=200)
