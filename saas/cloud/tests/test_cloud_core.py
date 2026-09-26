@@ -209,6 +209,52 @@ def test_tenant_device_and_event_isolation(tmp_path):
         assert client.get("/api/customer/overview", headers=cashier_login).status_code == 200
         assert client.get("/api/customer/users", headers=cashier_login).status_code == 403
 
+        # OWNER/MANAGER may queue a remote Edge command; CASHIER and other
+        # tenants may not. Edge delivery + ACK is tenant/device scoped.
+        command = client.post(
+            "/api/customer/commands",
+            headers=owner_a,
+            json={
+                "command_type": "EXTEND_SESSION",
+                "payload": {"session_ref": "local-session-1", "seconds": 1800},
+            },
+        )
+        assert command.status_code == 201, command.text
+        command_id = command.json()["id"]
+        assert client.post(
+            "/api/customer/commands",
+            headers=cashier_login,
+            json={
+                "command_type": "POWER_ON",
+                "payload": {"station_id": 1},
+            },
+        ).status_code == 403
+        assert client.get("/api/customer/commands", headers=owner_b).json()["commands"] == []
+
+        delivered = client.get("/api/edge/commands", headers=edge_headers)
+        assert delivered.status_code == 200, delivered.text
+        assert [x["id"] for x in delivered.json()["commands"]] == [command_id]
+        assert delivered.json()["commands"][0]["payload"]["seconds"] == 1800
+
+        ack = client.post(
+            f"/api/edge/commands/{command_id}/ack",
+            headers=edge_headers,
+            json={"status": "SUCCESS", "result": {"applied": True}},
+        )
+        assert ack.status_code == 200, ack.text
+        assert ack.json()["status"] == "SUCCESS"
+        # Terminal ACK is idempotent and command is no longer redelivered.
+        ack_again = client.post(
+            f"/api/edge/commands/{command_id}/ack",
+            headers=edge_headers,
+            json={"status": "SUCCESS", "result": {"applied": True}},
+        )
+        assert ack_again.status_code == 200
+        assert client.get("/api/edge/commands", headers=edge_headers).json()["commands"] == []
+        listed = client.get("/api/customer/commands", headers=owner_a).json()["commands"]
+        assert listed[0]["id"] == command_id
+        assert listed[0]["status"] == "SUCCESS"
+
         disabled = client.put(
             f"/api/customer/users/{cashier_id}/status",
             headers=owner_a,
