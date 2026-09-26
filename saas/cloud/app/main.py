@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .db import get_db, init_db
-from .models import Branch, CloudUser, EdgeDevice, EdgeEvent, InstallationCode, Tenant, UserToken
+from .models import Branch, CloudInvoice, CloudSession, CloudStation, CloudUser, EdgeDevice, EdgeEvent, InstallationCode, Tenant, UserToken
 from .schemas import (
     EdgeActivateRequest,
     EdgeEventsRequest,
@@ -401,6 +401,14 @@ def ingest_events(
                 payload=item.payload,
             )
         )
+        apply_edge_event(
+            db,
+            edge,
+            event_type=item.event_type,
+            session_ref=item.session_ref,
+            occurred_at=item.occurred_at,
+            payload=item.payload,
+        )
         accepted.append(item.event_id)
     managed = db.get(EdgeDevice, edge.id)
     managed.last_seen_at = utcnow()
@@ -416,6 +424,28 @@ def customer_overview(
     tenant = db.get(Tenant, user.tenant_id)
     branch = db.scalar(select(Branch).where(Branch.tenant_id == user.tenant_id).order_by(Branch.id))
     edges = db.scalars(select(EdgeDevice).where(EdgeDevice.tenant_id == user.tenant_id)).all()
+    stations = db.scalars(
+        select(CloudStation)
+        .where(CloudStation.tenant_id == user.tenant_id)
+        .order_by(CloudStation.code, CloudStation.source_station_id)
+    ).all()
+    active_sessions = db.scalars(
+        select(CloudSession)
+        .where(
+            CloudSession.tenant_id == user.tenant_id,
+            CloudSession.status.in_(["RUNNING", "PAUSED", "EXPIRED"]),
+        )
+        .order_by(CloudSession.last_event_at.desc())
+    ).all()
+    invoice_row = db.execute(
+        select(
+            func.count(CloudInvoice.id),
+            func.coalesce(func.sum(CloudInvoice.amount_piasters), 0),
+            func.coalesce(func.sum(CloudInvoice.multi_amount_piasters), 0),
+            func.coalesce(func.sum(CloudInvoice.multi_3_seconds), 0),
+            func.coalesce(func.sum(CloudInvoice.multi_4_seconds), 0),
+        ).where(CloudInvoice.tenant_id == user.tenant_id)
+    ).one()
     event_count = db.scalar(select(func.count(EdgeEvent.id)).where(EdgeEvent.tenant_id == user.tenant_id)) or 0
     return {
         "customer": {"id": tenant.id, "code": tenant.code, "name": tenant.name},
@@ -430,5 +460,40 @@ def customer_overview(
             }
             for x in edges
         ],
+        "stations": [
+            {
+                "source_station_id": x.source_station_id,
+                "code": x.code,
+                "power_state": x.power_state,
+                "last_event_at": x.last_event_at,
+            }
+            for x in stations
+        ],
+        "active_sessions": [
+            {
+                "session_ref": x.local_session_ref,
+                "station_id": x.source_station_id,
+                "station_code": x.station_code,
+                "status": x.status,
+                "session_type": x.session_type,
+                "controller_count": x.controller_count,
+                "hourly_rate_piasters": x.hourly_rate_piasters,
+                "started_at": x.started_at,
+                "ended_at": x.ended_at,
+                "timed_total_seconds": x.timed_total_seconds,
+                "timed_remaining_seconds": x.timed_remaining_seconds,
+                "multi_3_billable_seconds": x.multi_3_billable_seconds,
+                "multi_4_billable_seconds": x.multi_4_billable_seconds,
+                "last_event_at": x.last_event_at,
+            }
+            for x in active_sessions
+        ],
+        "sales_summary": {
+            "invoice_count": int(invoice_row[0] or 0),
+            "sales_piasters": int(invoice_row[1] or 0),
+            "multi_revenue_piasters": int(invoice_row[2] or 0),
+            "multi_3_seconds": int(invoice_row[3] or 0),
+            "multi_4_seconds": int(invoice_row[4] or 0),
+        },
         "received_events": int(event_count),
     }
