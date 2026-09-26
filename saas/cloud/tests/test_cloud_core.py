@@ -186,6 +186,54 @@ def test_tenant_device_and_event_isolation(tmp_path):
         assert after_b["received_events"] == 0
         assert after_b["sales_summary"]["invoice_count"] == 0
 
+        # Customer user management is strictly tenant-scoped.
+        new_user = client.post(
+            "/api/customer/users",
+            headers=owner_a,
+            json={
+                "username": "cashier-a",
+                "password": "CashierPass-123!",
+                "display_name": "Cashier A",
+                "role": "CASHIER",
+            },
+        )
+        assert new_user.status_code == 201, new_user.text
+        cashier_id = new_user.json()["id"]
+        users_a = client.get("/api/customer/users", headers=owner_a)
+        assert users_a.status_code == 200
+        assert any(x["username"] == "cashier-a" for x in users_a.json()["users"])
+        assert client.get("/api/customer/users", headers=owner_b).status_code == 200
+        assert not any(x["username"] == "cashier-a" for x in client.get("/api/customer/users", headers=owner_b).json()["users"])
+
+        cashier_login = auth(client, "cashier-a", "CashierPass-123!", a["customer"]["code"])
+        assert client.get("/api/customer/overview", headers=cashier_login).status_code == 200
+        assert client.get("/api/customer/users", headers=cashier_login).status_code == 403
+
+        disabled = client.put(
+            f"/api/customer/users/{cashier_id}/status",
+            headers=owner_a,
+            json={"is_active": False},
+        )
+        assert disabled.status_code == 200
+        assert client.get("/api/customer/overview", headers=cashier_login).status_code == 401
+
+        suspended = client.put(
+            f"/api/admin/tenants/{a['customer']['id']}/status",
+            headers=admin,
+            json={"status": "SUSPENDED"},
+        )
+        assert suspended.status_code == 200
+        assert client.get("/api/customer/overview", headers=owner_a).status_code == 403
+        assert client.post("/api/edge/heartbeat", headers=edge_headers, json={}).status_code == 403
+
+        reactivated = client.put(
+            f"/api/admin/tenants/{a['customer']['id']}/status",
+            headers=admin,
+            json={"status": "ACTIVE"},
+        )
+        assert reactivated.status_code == 200
+        owner_a = auth(client, "owner-a", "OwnerPass-123!", a["customer"]["code"])
+
         revoke = client.post(f"/api/admin/edge-devices/{edge['device_id']}/revoke", headers=admin)
         assert revoke.status_code == 200
         assert client.post("/api/edge/heartbeat", headers=edge_headers, json={}).status_code == 401
