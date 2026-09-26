@@ -69,3 +69,17 @@ class TenantStatusUpdate(BaseModel):
 class PasswordChange(BaseModel):
     current_password: str = Field(min_length=1, max_length=200)
     new_password: str = Field(min_length=8, max_length=200)
+
+
+class CloudCommandCreate(BaseModel):
+    command_type: str = Field(
+        pattern="^(POWER_ON|POWER_OFF|EXTEND_SESSION|CHANGE_CONTROLLERS|PAUSE_SESSION|RESUME_SESSION)$"
+    )
+    edge_device_id: str | None = Field(default=None, max_length=64)
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class CloudCommandAck(BaseModel):
+    status: str = Field(pattern="^(SUCCESS|FAILED)$")
+    result: dict[str, Any] = Field(default_factory=dict)
+    error: str | None = Field(default=None, max_length=1000)
