@@ -10,6 +10,7 @@ def load_app(tmp_path):
     os.environ["DATABASE_URL"] = f"sqlite:///{db_path}"
     os.environ["PLAYZONE_PLATFORM_ADMIN_USERNAME"] = "platform"
     os.environ["PLAYZONE_PLATFORM_ADMIN_PASSWORD"] = "ChangeMe-123!"
+    os.environ["PLAYZONE_AUTH_SECRET"] = "test-stable-auth-secret-that-is-long-enough"
 
     import app.models
     import app.db
@@ -302,3 +303,33 @@ def test_login_pages_do_not_depend_on_named_element_globals(tmp_path):
         assert "document.getElementById('login').classList.add('hidden')" in customer_html
         assert "document.getElementById('app').classList.remove('hidden')" in platform_html
         assert "document.getElementById('app').classList.remove('hidden')" in customer_html
+
+
+def test_platform_admin_token_survives_database_replacement(tmp_path):
+    first_dir = tmp_path / "first"
+    second_dir = tmp_path / "second"
+    first_dir.mkdir()
+    second_dir.mkdir()
+
+    first_app = load_app(first_dir)
+    with TestClient(first_app) as client:
+        response = client.post(
+            "/api/auth/login",
+            json={"username": "platform", "password": "ChangeMe-123!"},
+        )
+        assert response.status_code == 200, response.text
+        token = response.json()["token"]
+        assert token.startswith("pzs1.")
+        assert client.get(
+            "/api/admin/tenants",
+            headers={"Authorization": f"Bearer {token}"},
+        ).status_code == 200
+
+    # Simulates Railway replacing the whole ephemeral SQLite container.
+    second_app = load_app(second_dir)
+    with TestClient(second_app) as client:
+        reused = client.get(
+            "/api/admin/tenants",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert reused.status_code == 200, reused.text
