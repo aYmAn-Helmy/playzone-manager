@@ -52,6 +52,8 @@ def _background_power_off(station_id: int) -> None:
     patched = mod.patch_main_text(source)
     assert "from .edge_runtime import (" in patched
     assert "start_edge_runtime()" in patched
+    assert "start_cloud_command_runtime()" in patched
+    assert "stop_cloud_command_runtime()" in patched
     assert "stop_edge_runtime()" in patched
     assert '/api/root/edge/status' in patched
     assert '/api/root/edge/activate' in patched
