@@ -283,3 +283,22 @@ def test_tenant_device_and_event_isolation(tmp_path):
         revoke = client.post(f"/api/admin/edge-devices/{edge['device_id']}/revoke", headers=admin)
         assert revoke.status_code == 200
         assert client.post("/api/edge/heartbeat", headers=edge_headers, json={}).status_code == 401
+
+
+def test_login_pages_do_not_depend_on_named_element_globals(tmp_path):
+    app = load_app(tmp_path)
+    with TestClient(app) as client:
+        platform = client.get("/platform")
+        customer = client.get("/")
+        assert platform.status_code == 200
+        assert customer.status_code == 200
+
+        platform_html = platform.text
+        customer_html = customer.text
+
+        assert "login.classList" not in platform_html
+        assert "login.classList" not in customer_html
+        assert "document.getElementById('login').classList.add('hidden')" in platform_html
+        assert "document.getElementById('login').classList.add('hidden')" in customer_html
+        assert "document.getElementById('app').classList.remove('hidden')" in platform_html
+        assert "document.getElementById('app').classList.remove('hidden')" in customer_html
