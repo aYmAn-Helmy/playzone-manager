@@ -114,3 +114,77 @@ class EdgeEvent(Base):
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+
+class CloudStation(Base):
+    __tablename__ = "cloud_stations"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "branch_id", "source_station_id", name="uq_cloud_station_source"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    branch_id: Mapped[int] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"), index=True)
+    source_station_id: Mapped[int] = mapped_column(Integer)
+    code: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    power_state: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    last_event_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class CloudSession(Base):
+    __tablename__ = "cloud_sessions"
+    __table_args__ = (
+        UniqueConstraint("edge_device_id", "local_session_ref", name="uq_cloud_session_edge_local"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    branch_id: Mapped[int] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"), index=True)
+    edge_device_id: Mapped[str] = mapped_column(ForeignKey("edge_devices.id", ondelete="CASCADE"), index=True)
+    local_session_ref: Mapped[str] = mapped_column(String(100))
+    source_station_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    station_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="RUNNING", index=True)
+    session_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    controller_count: Mapped[int] = mapped_column(Integer, default=2)
+    hourly_rate_piasters: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    timed_total_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    timed_remaining_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    multi_3_billable_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    multi_4_billable_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    last_event_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class CloudInvoice(Base):
+    __tablename__ = "cloud_invoices"
+    __table_args__ = (
+        UniqueConstraint("edge_device_id", "local_invoice_id", name="uq_cloud_invoice_edge_local"),
+        UniqueConstraint("tenant_id", "invoice_number", name="uq_cloud_invoice_number"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    branch_id: Mapped[int] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"), index=True)
+    edge_device_id: Mapped[str] = mapped_column(ForeignKey("edge_devices.id", ondelete="CASCADE"), index=True)
+    local_invoice_id: Mapped[int] = mapped_column(Integer)
+    invoice_number: Mapped[str] = mapped_column(String(80), index=True)
+    local_session_ref: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    station_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    amount_piasters: Mapped[int] = mapped_column(Integer, default=0)
+    gameplay_amount_piasters: Mapped[int] = mapped_column(Integer, default=0)
+    base_gameplay_amount_piasters: Mapped[int] = mapped_column(Integer, default=0)
+    multi_amount_piasters: Mapped[int] = mapped_column(Integer, default=0)
+    multi_3_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    multi_3_amount_piasters: Mapped[int] = mapped_column(Integer, default=0)
+    multi_4_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    multi_4_amount_piasters: Mapped[int] = mapped_column(Integer, default=0)
+    products_amount_piasters: Mapped[int] = mapped_column(Integer, default=0)
+    discount_piasters: Mapped[int] = mapped_column(Integer, default=0)
+    payment_method: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
