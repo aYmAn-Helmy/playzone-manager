@@ -130,8 +130,19 @@ netsh advfirewall firewall add rule name='PlayZone Manager Voltra TCP' dir=in ac
 
 Step 'Installing Edge auto-start task'
 $EdgeScript = Join-Path $RuntimeDest 'Start-PlayZoneEdge.ps1'
-$TaskCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$EdgeScript`""
-schtasks.exe /Create /F /SC ONSTART /RU SYSTEM /RL HIGHEST /TN $TaskName /TR $TaskCommand | Out-Null
+
+# Use the ScheduledTasks PowerShell API instead of schtasks.exe /TR.
+# This avoids quoting failures when Program Files paths contain spaces.
+$ExistingTask = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+if ($ExistingTask) {
+    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+}
+
+$TaskAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}"' -f $EdgeScript)
+$TaskTrigger = New-ScheduledTaskTrigger -AtStartup
+$TaskPrincipal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+Register-ScheduledTask -TaskName $TaskName -Action $TaskAction -Trigger $TaskTrigger -Principal $TaskPrincipal -Description 'PlayZone Manager Local Edge runtime' -Force | Out-Null
 
 Step 'Creating shortcuts'
 $DesktopExe = Join-Path $DesktopDest 'PlayZoneManager.exe'
@@ -148,7 +159,7 @@ foreach ($ShortcutPath in @(
 }
 
 Step 'Starting Local Edge'
-schtasks.exe /Run /TN $TaskName | Out-Null
+Start-ScheduledTask -TaskName $TaskName
 if (Wait-Edge 75) {
     Write-Host '[OK] Local Edge is online: http://127.0.0.1:8000' -ForegroundColor Green
 } else {
