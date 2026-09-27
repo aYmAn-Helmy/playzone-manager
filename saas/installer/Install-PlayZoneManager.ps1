@@ -96,6 +96,20 @@ if (-not $SkipCloudActivation) {
     } else {
         Write-Host "Cloud: $CloudUrl"
     }
+
+    # Reinstalls keep the machine-scoped activation in ProgramData.
+    # Probe it before asking for a one-time Installation Code.
+    $ExistingStatusJson = & $Python -m app.edge_runtime status
+    if ($LASTEXITCODE -eq 0) {
+        try {
+            $ExistingStatus = $ExistingStatusJson | ConvertFrom-Json
+            if ($ExistingStatus.activated -and $ExistingStatus.cloud_url -and $ExistingStatus.cloud_url.TrimEnd('/') -eq $CloudUrl.TrimEnd('/')) {
+                Write-Host "Existing Edge activation found for device $($ExistingStatus.device_id); no new Installation Code is required." -ForegroundColor Green
+                $InstallationCode = '__KEEP_EXISTING__'
+            }
+        } catch { }
+    }
+
     if ([string]::IsNullOrWhiteSpace($InstallationCode)) {
         $InstallationCode = Read-Host 'Installation Code from Platform Admin'
     }
