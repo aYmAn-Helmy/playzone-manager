@@ -29,6 +29,13 @@ jobs:
           & $csc /nologo /target:exe /optimize+ /out:"$env:RUNNER_TEMP\pz-service\service\PlayZoneManager.Service.exe" /reference:System.ServiceProcess.dll "local-service-test\PlayZoneManager.Service.cs"
           if ($LASTEXITCODE -ne 0) { throw "service compile failed" }
 
+      - name: Publish compiled service host
+        uses: actions/upload-artifact@v4
+        with:
+          name: PlayZoneManager-Service-win-x64
+          path: ${{ runner.temp }}\pz-service\service\PlayZoneManager.Service.exe
+          if-no-files-found: error
+
       - name: Prepare fake PlayZone runtime
         shell: powershell
         run: |
