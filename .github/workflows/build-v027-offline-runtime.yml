@@ -28,6 +28,7 @@ jobs:
           tzdata==2026.4
           argon2-cffi==25.1.0
           pywin32==311
+          pip==25.2
           REQ
           python -m pip install --upgrade pip
           python -m pip download             --dest offline/wheels             --only-binary=:all:             --platform win_amd64             --implementation cp             --python-version 312             --abi cp312             -r offline/requirements-offline.txt
