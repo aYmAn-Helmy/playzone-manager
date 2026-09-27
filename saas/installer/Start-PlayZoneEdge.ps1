@@ -1,16 +1,23 @@
 $ErrorActionPreference = 'Stop'
 
-$RuntimeRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$RuntimeRoot = Join-Path $env:ProgramFiles 'PlayZone Manager\runtime'
 $DataRoot = Join-Path $env:ProgramData 'PlayZone Manager'
 $Python = Join-Path $RuntimeRoot '.runtime\python\python.exe'
 $Backend = Join-Path $RuntimeRoot 'backend'
+$Logs = Join-Path $DataRoot 'logs'
+$Log = Join-Path $Logs 'edge.log'
 
-New-Item -ItemType Directory -Force -Path $DataRoot | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $DataRoot 'logs') | Out-Null
+New-Item -ItemType Directory -Force -Path $DataRoot,$Logs | Out-Null
 
 if (-not (Test-Path $Python)) {
-    throw "PlayZone portable Python runtime is missing: $Python"
+    Add-Content -LiteralPath $Log -Value "[$(Get-Date -Format o)] ERROR Portable Python missing: $Python"
+    exit 2
 }
+
+try {
+    Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://127.0.0.1:8000/api/health' | Out-Null
+    exit 0
+} catch { }
 
 $env:PLAYZONE_DB_PATH = Join-Path $DataRoot 'playzone.db'
 $env:PLAYZONE_EDGE_DB_PATH = Join-Path $DataRoot 'edge.db'
@@ -23,7 +30,12 @@ $env:VOLTRA_HTTP_PORT = '8086'
 $env:VOLTRA_POLL_INTERVAL = '10'
 $env:VOLTRA_RESPONSE_TIMEOUT = '3'
 $env:PLAYZONE_EDGE_APP_VERSION = '0.28-saas-prototype'
+$env:PLAYZONE_EDGE_SYNC_INTERVAL = '5'
+$env:PYTHONUNBUFFERED = '1'
 
 Set-Location $Backend
-& $Python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-exit $LASTEXITCODE
+Add-Content -LiteralPath $Log -Value "[$(Get-Date -Format o)] Starting PlayZone Edge"
+& $Python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 *>> $Log
+$exitCode = $LASTEXITCODE
+Add-Content -LiteralPath $Log -Value "[$(Get-Date -Format o)] Edge stopped, exit=$exitCode"
+exit $exitCode
