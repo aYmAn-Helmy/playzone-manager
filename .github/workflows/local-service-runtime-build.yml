@@ -1,0 +1,73 @@
+name: PlayZone Windows Runtime build
+
+on:
+  push:
+    branches:
+      - release/v028-local-service
+    paths:
+      - "local-service-test/requirements-portable.txt"
+      - ".github/workflows/local-service-runtime-build.yml"
+  workflow_dispatch:
+
+jobs:
+  runtime:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build self-contained embedded Python runtime
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $PyVersion = '3.12.6'
+          $build = Join-Path $env:GITHUB_WORKSPACE 'local-service-test\build'
+          $runtimeRoot = Join-Path $build '.runtime'
+          $runtime = Join-Path $runtimeRoot 'python'
+          $downloads = Join-Path $build 'downloads'
+          New-Item -ItemType Directory -Force -Path $runtime,$downloads | Out-Null
+
+          $zip = Join-Path $downloads 'python-embed.zip'
+          $getPip = Join-Path $downloads 'get-pip.py'
+          Invoke-WebRequest -UseBasicParsing -Uri "https://www.python.org/ftp/python/$PyVersion/python-$PyVersion-embed-amd64.zip" -OutFile $zip
+          Expand-Archive -LiteralPath $zip -DestinationPath $runtime -Force
+
+          New-Item -ItemType Directory -Force -Path (Join-Path $runtime 'Lib\site-packages') | Out-Null
+          @(
+            'python312.zip'
+            '.'
+            'Lib'
+            'Lib\site-packages'
+            '..\..\backend'
+            'import site'
+          ) | Set-Content -LiteralPath (Join-Path $runtime 'python312._pth') -Encoding ASCII
+
+          Invoke-WebRequest -UseBasicParsing -Uri 'https://bootstrap.pypa.io/get-pip.py' -OutFile $getPip
+          & (Join-Path $runtime 'python.exe') $getPip --disable-pip-version-check --no-warn-script-location
+          if ($LASTEXITCODE -ne 0) { throw "get-pip failed: $LASTEXITCODE" }
+
+          & (Join-Path $runtime 'python.exe') -m pip install --disable-pip-version-check --no-warn-script-location -r 'local-service-test\requirements-portable.txt'
+          if ($LASTEXITCODE -ne 0) { throw "dependency install failed: $LASTEXITCODE" }
+
+          & (Join-Path $runtime 'python.exe') -c "import fastapi,uvicorn,sqlalchemy,pydantic,httpx,argon2,tzdata; print('RUNTIME_OK')"
+          if ($LASTEXITCODE -ne 0) { throw "runtime import test failed: $LASTEXITCODE" }
+
+          Remove-Item -Recurse -Force (Join-Path $runtime 'Lib\site-packages\pip') -ErrorAction SilentlyContinue
+          Get-ChildItem (Join-Path $runtime 'Lib\site-packages') -Directory -Filter 'pip-*.dist-info' -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
+          Remove-Item -Recurse -Force (Join-Path $runtime 'Scripts') -ErrorAction SilentlyContinue
+          Set-Content -LiteralPath (Join-Path $runtimeRoot 'READY-v0.28.txt') -Value "PlayZone v0.28 local service Windows runtime ready" -Encoding ASCII
+
+      - name: Validate embedded runtime after cleanup
+        shell: powershell
+        run: |
+          $python = 'local-service-test\build\.runtime\python\python.exe'
+          & $python -c "import fastapi,uvicorn,sqlalchemy,pydantic,httpx,argon2,tzdata; print('RUNTIME_FINAL_OK')"
+          if ($LASTEXITCODE -ne 0) { throw 'final embedded runtime validation failed' }
+
+      - name: Publish embedded runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: PlayZoneManager-PythonRuntime-win-x64
+          path: local-service-test/build/.runtime
+          include-hidden-files: true
+          if-no-files-found: error
