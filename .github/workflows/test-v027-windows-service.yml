@@ -1,0 +1,176 @@
+name: Test v0.27 offline Windows service
+
+on:
+  push:
+    branches: [service-v027]
+    paths:
+      - 'service-v027-ci/**'
+      - '.github/workflows/test-v027-windows-service.yml'
+  workflow_dispatch:
+
+jobs:
+  windows-service-e2e:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build offline payload
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Force payload\wheels | Out-Null
+          Invoke-WebRequest -UseBasicParsing -Uri 'https://www.python.org/ftp/python/3.12.6/python-3.12.6-embed-amd64.zip' -OutFile payload\python-3.12.6-embed-amd64.zip
+          Invoke-WebRequest -UseBasicParsing -Uri 'https://bootstrap.pypa.io/get-pip.py' -OutFile payload\get-pip.py
+          @'
+          fastapi==0.141.1
+          uvicorn==0.53.0
+          sqlalchemy==2.0.54
+          pydantic==2.13.5
+          httpx==0.28.1
+          tzdata==2026.4
+          argon2-cffi==25.1.0
+          pywin32==311
+          '@ | Set-Content payload\requirements-offline.txt -Encoding ASCII
+          python -m pip download --dest payload\wheels --only-binary=:all: -r payload\requirements-offline.txt
+
+      - name: Parse PowerShell bootstrap
+        shell: pwsh
+        run: |
+          $errors=$null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'service-v027-ci\Bootstrap-Portable.ps1'),[ref]$null,[ref]$errors) | Out-Null
+          if ($errors.Count) { $errors | Format-List | Out-String | Write-Error; exit 1 }
+
+      - name: Prepare service test under Program Files path
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $root='C:\Program Files\PlayZone Test'
+          if (Test-Path $root) { Remove-Item -Recurse -Force $root }
+          New-Item -ItemType Directory -Force "$root\backend\app" | Out-Null
+          Copy-Item service-v027-ci\Bootstrap-Portable.ps1 "$root\Bootstrap-Portable.ps1"
+          Copy-Item service-v027-ci\windows_service.py "$root\backend\app\windows_service.py"
+          Set-Content "$root\backend\app\__init__.py" '' -Encoding ASCII
+          @'
+          from fastapi import FastAPI
+          import socket
+          app=FastAPI()
+          _sock=None
+
+          @app.on_event("startup")
+          def startup():
+              global _sock
+              _sock=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+              _sock.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+              _sock.bind(("0.0.0.0",10086))
+              _sock.listen(4)
+
+          @app.on_event("shutdown")
+          def shutdown():
+              global _sock
+              if _sock:
+                  _sock.close()
+                  _sock=None
+
+          @app.get("/api/health")
+          def health():
+              return {"ok": True, "service": "PlayZoneManager"}
+          '@ | Set-Content "$root\backend\app\main.py" -Encoding UTF8
+
+      - name: Run exact offline bootstrap
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $root='C:\Program Files\PlayZone Test'
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$root\Bootstrap-Portable.ps1" -PayloadRoot (Resolve-Path payload)
+          if ($LASTEXITCODE -ne 0) { throw "bootstrap failed $LASTEXITCODE" }
+          $py="$root\.runtime\python\python.exe"
+          & $py -c "import fastapi,uvicorn,sqlalchemy,pydantic,httpx,argon2,tzdata,win32serviceutil,win32service,servicemanager,app.main; print('IMPORTS_OK')"
+          if ($LASTEXITCODE -ne 0) { throw 'runtime import failed' }
+
+      - name: Finalize pywin32 and install service
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $root='C:\Program Files\PlayZone Test'
+          $py="$root\.runtime\python\python.exe"
+          $post=Get-ChildItem "$root\.runtime\python" -Filter pywin32_postinstall.py -Recurse -File | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $post) { throw 'pywin32_postinstall.py missing' }
+          & $py $post -install -quiet
+          if ($LASTEXITCODE -ne 0) { throw "pywin32 postinstall failed $LASTEXITCODE" }
+          $serviceExe=Get-ChildItem "$root\.runtime\python" -Filter pythonservice.exe -Recurse -File | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $serviceExe) { throw 'pythonservice.exe missing' }
+          Write-Host "pythonservice=$serviceExe"
+          $svcScript="$root\backend\app\windows_service.py"
+          & $py $svcScript --startup auto install
+          if ($LASTEXITCODE -ne 0) { throw "service install failed $LASTEXITCODE" }
+          sc.exe qc PlayZoneManager
+
+      - name: Start service and verify HTTP + TCP
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Start-Service PlayZoneManager
+          $svc=Get-Service PlayZoneManager
+          $svc.WaitForStatus('Running',[TimeSpan]::FromSeconds(30))
+          $healthy=$false
+          for($i=0;$i -lt 60;$i++){
+            try {
+              $r=Invoke-RestMethod -TimeoutSec 1 'http://127.0.0.1:8000/api/health'
+              if($r.ok){$healthy=$true;break}
+            } catch {}
+            Start-Sleep -Milliseconds 500
+          }
+          if(-not $healthy){
+            if(Test-Path "$env:ProgramData\PlayZone Manager\logs\service.log"){Get-Content "$env:ProgramData\PlayZone Manager\logs\service.log"}
+            throw 'HTTP health did not become ready'
+          }
+          $c=New-Object Net.Sockets.TcpClient
+          $iar=$c.BeginConnect('127.0.0.1',10086,$null,$null)
+          $ok=$iar.AsyncWaitHandle.WaitOne(3000) -and $c.Connected
+          $c.Close()
+          if(-not $ok){throw 'TCP 10086 not listening'}
+          Write-Host 'SERVICE_HTTP_TCP_OK'
+
+      - name: Stop, restart and re-verify service
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Restart-Service PlayZoneManager -Force
+          (Get-Service PlayZoneManager).WaitForStatus('Running',[TimeSpan]::FromSeconds(30))
+          $ok=$false
+          for($i=0;$i -lt 60;$i++){
+            try {$r=Invoke-RestMethod -TimeoutSec 1 'http://127.0.0.1:8000/api/health'; if($r.ok){$ok=$true;break}} catch{}
+            Start-Sleep -Milliseconds 500
+          }
+          if(-not $ok){throw 'health failed after restart'}
+          Write-Host 'SERVICE_RESTART_OK'
+
+      - name: Verify bootstrap idempotency
+        shell: pwsh
+        run: |
+          $root='C:\Program Files\PlayZone Test'
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$root\Bootstrap-Portable.ps1" -PayloadRoot (Resolve-Path payload)
+          if ($LASTEXITCODE -ne 0) { throw 'second bootstrap failed' }
+          Select-String -Path "$root\Bootstrap-Portable.log" -Pattern 'already prepared' -Quiet | ForEach-Object { if(-not $_){throw 'idempotency message missing'} }
+
+      - name: Cleanup service
+        if: always()
+        shell: pwsh
+        run: |
+          Stop-Service PlayZoneManager -Force -ErrorAction SilentlyContinue
+          sc.exe delete PlayZoneManager
+          Start-Sleep -Seconds 2
+
+      - name: Upload diagnostic logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v027-service-ci-logs
+          path: |
+            C:\Program Files\PlayZone Test\Bootstrap-Portable.log
+            C:\ProgramData\PlayZone Manager\logs\service.log
