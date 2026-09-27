@@ -14,6 +14,15 @@ if (-not (Test-Path $Python)) {
     exit 2
 }
 
+$Pth = Join-Path $RuntimeRoot '.runtime\python\python312._pth'
+if (Test-Path $Pth) {
+    $PthLines = @(Get-Content -LiteralPath $Pth)
+    if ($PthLines -notcontains '..\..\backend') {
+        $PthLines += '..\..\backend'
+        Set-Content -LiteralPath $Pth -Value $PthLines -Encoding ASCII
+    }
+}
+
 try {
     Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://127.0.0.1:8000/api/health' | Out-Null
     exit 0
