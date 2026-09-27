@@ -1,7 +1,7 @@
 #Requires -RunAsAdministrator
 param(
-    [string]$BundleRoot = (Split-Path -Parent $MyInvocation.MyCommand.Path),
-    [string]$CloudUrl = '',
+    [string]$BundleRoot = $PSScriptRoot,
+    [string]$CloudUrl = 'https://playzone-cloud-production.up.railway.app',
     [string]$InstallationCode = '',
     [switch]$SkipCloudActivation
 )
@@ -13,69 +13,91 @@ $DesktopDest = Join-Path $InstallRoot 'desktop'
 $DataRoot = Join-Path $env:ProgramData 'PlayZone Manager'
 $RuntimeSource = Join-Path $BundleRoot 'runtime'
 $DesktopSource = Join-Path $BundleRoot 'desktop'
+$TaskName = 'PlayZone Manager Edge'
 
-if (-not (Test-Path $RuntimeSource)) { throw "Missing bundle runtime directory: $RuntimeSource" }
-if (-not (Test-Path $DesktopSource)) { throw "Missing bundle desktop directory: $DesktopSource" }
+function Step([string]$Text) {
+    Write-Host "`n==> $Text" -ForegroundColor Cyan
+}
 
-Write-Host 'Installing PlayZone Manager...' -ForegroundColor Cyan
+function Wait-Edge([int]$Seconds = 60) {
+    $deadline = (Get-Date).AddSeconds($Seconds)
+    while ((Get-Date) -lt $deadline) {
+        try {
+            $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://127.0.0.1:8000/api/health'
+            if ($r.StatusCode -eq 200) { return $true }
+        } catch { }
+        Start-Sleep -Milliseconds 500
+    }
+    return $false
+}
 
-schtasks.exe /End /TN 'PlayZone Manager Edge' 2>$null | Out-Null
+if (-not (Test-Path $RuntimeSource)) { throw "Missing runtime folder: $RuntimeSource" }
+if (-not (Test-Path $DesktopSource)) { throw "Missing desktop folder: $DesktopSource" }
+if (-not (Test-Path (Join-Path $DesktopSource 'PlayZoneManager.exe'))) { throw 'PlayZoneManager.exe is missing from desktop folder.' }
 
-New-Item -ItemType Directory -Force -Path $InstallRoot,$DataRoot | Out-Null
+Write-Host 'PlayZone Manager v0.28 SaaS Prototype' -ForegroundColor Green
+Write-Host 'This installer requires Internet only during first-time local Python setup and Cloud activation.'
+
+Step 'Stopping previous Edge instance'
+schtasks.exe /End /TN $TaskName 2>$null | Out-Null
+Start-Sleep -Milliseconds 500
+
+Step 'Copying PlayZone Manager files'
+New-Item -ItemType Directory -Force -Path $InstallRoot,$DataRoot,(Join-Path $DataRoot 'logs') | Out-Null
 if (Test-Path $RuntimeDest) { Remove-Item -Recurse -Force $RuntimeDest }
 if (Test-Path $DesktopDest) { Remove-Item -Recurse -Force $DesktopDest }
 Copy-Item -Recurse -Force $RuntimeSource $RuntimeDest
 Copy-Item -Recurse -Force $DesktopSource $DesktopDest
 Copy-Item -Force (Join-Path $BundleRoot 'Start-PlayZoneEdge.ps1') (Join-Path $RuntimeDest 'Start-PlayZoneEdge.ps1')
 
-$Setup = Join-Path $RuntimeDest 'Setup-Portable.bat'
-if (Test-Path $Setup) {
-    Push-Location $RuntimeDest
-    try {
-        & cmd.exe /c '"Setup-Portable.bat"'
-        if ($LASTEXITCODE -ne 0) { throw "Portable runtime setup failed with exit code $LASTEXITCODE" }
-    } finally {
-        Pop-Location
-    }
-}
+Step 'Preparing local Python runtime'
+$Bootstrap = Join-Path $RuntimeDest 'Bootstrap-Portable.ps1'
+if (-not (Test-Path $Bootstrap)) { throw "Missing bootstrap: $Bootstrap" }
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Bootstrap
+if ($LASTEXITCODE -ne 0) { throw "Portable runtime setup failed with exit code $LASTEXITCODE" }
 
 $Python = Join-Path $RuntimeDest '.runtime\python\python.exe'
-if (-not (Test-Path $Python)) { throw "Portable Python runtime missing after setup: $Python" }
+if (-not (Test-Path $Python)) { throw "Portable Python was not created: $Python" }
 
 $env:PLAYZONE_DB_PATH = Join-Path $DataRoot 'playzone.db'
 $env:PLAYZONE_EDGE_DB_PATH = Join-Path $DataRoot 'edge.db'
+$env:VOLTRA_DATA_PATH = Join-Path $DataRoot 'voltra.json'
 $env:PLAYZONE_EDGE_APP_VERSION = '0.28-saas-prototype'
 
 if (-not $SkipCloudActivation) {
+    Step 'Linking this PC to PlayZone Cloud'
     if ([string]::IsNullOrWhiteSpace($CloudUrl)) {
-        $CloudUrl = Read-Host 'PlayZone Cloud URL'
+        $CloudUrl = Read-Host 'Cloud URL'
+    } else {
+        Write-Host "Cloud: $CloudUrl"
     }
     if ([string]::IsNullOrWhiteSpace($InstallationCode)) {
-        $InstallationCode = Read-Host 'Installation Code'
+        $InstallationCode = Read-Host 'Installation Code from Platform Admin'
     }
-    if ([string]::IsNullOrWhiteSpace($CloudUrl) -or [string]::IsNullOrWhiteSpace($InstallationCode)) {
-        throw 'Cloud URL and Installation Code are required. Use -SkipCloudActivation only for offline lab/testing installs.'
+    if ([string]::IsNullOrWhiteSpace($InstallationCode)) {
+        throw 'Installation Code is required.'
     }
 
     Push-Location (Join-Path $RuntimeDest 'backend')
     try {
         & $Python -m app.edge_runtime activate --cloud-url $CloudUrl.TrimEnd('/') --installation-code $InstallationCode.Trim()
-        if ($LASTEXITCODE -ne 0) { throw "Edge activation failed with exit code $LASTEXITCODE" }
+        if ($LASTEXITCODE -ne 0) { throw "Cloud activation failed with exit code $LASTEXITCODE" }
     } finally {
         Pop-Location
     }
 }
 
+Step 'Configuring Voltra firewall rule'
 netsh advfirewall firewall delete rule name='PlayZone Manager Voltra TCP' | Out-Null
 netsh advfirewall firewall add rule name='PlayZone Manager Voltra TCP' dir=in action=allow protocol=TCP localport=10086 profile=private | Out-Null
 
+Step 'Installing Edge auto-start task'
 $EdgeScript = Join-Path $RuntimeDest 'Start-PlayZoneEdge.ps1'
 $TaskCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$EdgeScript`""
-schtasks.exe /Create /F /SC ONSTART /RU SYSTEM /RL HIGHEST /TN 'PlayZone Manager Edge' /TR $TaskCommand | Out-Null
-schtasks.exe /Run /TN 'PlayZone Manager Edge' | Out-Null
+schtasks.exe /Create /F /SC ONSTART /RU SYSTEM /RL HIGHEST /TN $TaskName /TR $TaskCommand | Out-Null
 
+Step 'Creating shortcuts'
 $DesktopExe = Join-Path $DesktopDest 'PlayZoneManager.exe'
-if (-not (Test-Path $DesktopExe)) { throw "Desktop executable missing: $DesktopExe" }
 $Shell = New-Object -ComObject WScript.Shell
 foreach ($ShortcutPath in @(
     (Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'PlayZone Manager.lnk'),
@@ -88,9 +110,26 @@ foreach ($ShortcutPath in @(
     $Shortcut.Save()
 }
 
+Step 'Starting Local Edge'
+schtasks.exe /Run /TN $TaskName | Out-Null
+if (Wait-Edge 75) {
+    Write-Host '[OK] Local Edge is online: http://127.0.0.1:8000' -ForegroundColor Green
+} else {
+    Write-Warning "Local Edge did not answer within 75 seconds. Check: $DataRoot\logs\edge.log"
+}
+
+Step 'Starting PlayZone Manager Desktop'
+Start-Process -FilePath $DesktopExe -WorkingDirectory $DesktopDest
+
 Write-Host ''
-Write-Host 'PlayZone Manager installed successfully.' -ForegroundColor Green
+Write-Host '=============================================' -ForegroundColor Green
+Write-Host ' PlayZone Manager installation completed' -ForegroundColor Green
+Write-Host '=============================================' -ForegroundColor Green
 Write-Host "Application : $DesktopExe"
-Write-Host "Local Edge  : http://127.0.0.1:8000"
-Write-Host "Voltra TCP  : 10086 (Private network only)"
+Write-Host 'Local Edge  : http://127.0.0.1:8000'
+Write-Host 'Voltra TCP  : 10086 (Private network only)'
 Write-Host "Data        : $DataRoot"
+Write-Host "Edge log    : $DataRoot\logs\edge.log"
+Write-Host ''
+Write-Host 'After the first successful setup, cashier/session/Voltra runtime can continue locally if Internet is disconnected.'
+Read-Host 'Press Enter to close installer'
