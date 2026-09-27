@@ -61,6 +61,29 @@ if ($LASTEXITCODE -ne 0) { throw "Portable runtime setup failed with exit code $
 $Python = Join-Path $RuntimeDest '.runtime\python\python.exe'
 if (-not (Test-Path $Python)) { throw "Portable Python was not created: $Python" }
 
+Step 'Configuring portable Python application path'
+$Pth = Join-Path $RuntimeDest '.runtime\python\python312._pth'
+if (-not (Test-Path $Pth)) { throw "Portable Python path file is missing: $Pth" }
+$PthLines = @(Get-Content -LiteralPath $Pth)
+if ($PthLines -notcontains '..\..\backend') {
+    $SiteIndex = [Array]::IndexOf($PthLines, 'import site')
+    if ($SiteIndex -ge 0) {
+        $Before = @()
+        $After = @()
+        if ($SiteIndex -gt 0) { $Before = $PthLines[0..($SiteIndex-1)] }
+        $After = $PthLines[$SiteIndex..($PthLines.Length-1)]
+        $PthLines = @($Before + '..\..\backend' + $After)
+    } else {
+        $PthLines += '..\..\backend'
+    }
+    Set-Content -LiteralPath $Pth -Value $PthLines -Encoding ASCII
+}
+
+& $Python -c "import app, app.edge_runtime; print('PlayZone Edge import OK')"
+if ($LASTEXITCODE -ne 0) {
+    throw "Portable Python cannot import PlayZone backend from $RuntimeDest\backend"
+}
+
 $env:PLAYZONE_DB_PATH = Join-Path $DataRoot 'playzone.db'
 $env:PLAYZONE_EDGE_DB_PATH = Join-Path $DataRoot 'edge.db'
 $env:VOLTRA_DATA_PATH = Join-Path $DataRoot 'voltra.json'
