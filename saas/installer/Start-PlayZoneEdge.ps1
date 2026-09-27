@@ -44,7 +44,16 @@ $env:PYTHONUNBUFFERED = '1'
 
 Set-Location $Backend
 Add-Content -LiteralPath $Log -Value "[$(Get-Date -Format o)] Starting PlayZone Edge"
-& $Python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 *>> $Log
-$exitCode = $LASTEXITCODE
+try {
+    # Uvicorn writes normal INFO output to stderr. Merge the native streams in
+    # cmd.exe so Windows PowerShell 5.1 does not turn them into terminating errors.
+    $CommandLine = "`"$Python`" -m uvicorn app.main:app --host 127.0.0.1 --port 8000 >> `"$Log`" 2>&1"
+    & $env:ComSpec /d /s /c $CommandLine
+    $exitCode = $LASTEXITCODE
+} catch {
+    $exitCode = 1
+    $Details = ($_ | Out-String).Trim()
+    Add-Content -LiteralPath $Log -Value "[$(Get-Date -Format o)] ERROR Failed to launch Edge: $Details"
+}
 Add-Content -LiteralPath $Log -Value "[$(Get-Date -Format o)] Edge stopped, exit=$exitCode"
 exit $exitCode
