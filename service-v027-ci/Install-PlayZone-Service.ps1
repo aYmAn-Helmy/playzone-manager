@@ -128,6 +128,13 @@ if (-not $healthy) {
     Fail "Service started but Local Web did not become healthy. Check $DataRoot\logs\service.log"
 }
 
+try {
+    $ui = Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 'http://127.0.0.1:8000/'
+    if ($ui.StatusCode -ne 200 -or $ui.Content.Length -lt 100) { Fail 'Local Web UI did not load correctly.' }
+} catch {
+    Fail "Local Web API is healthy but the cashier UI failed to load: $($_.Exception.Message)"
+}
+
 Step 'Verifying Voltra TCP listener'
 $tcpOk = $false
 try {
@@ -136,7 +143,7 @@ try {
     $tcpOk = $iar.AsyncWaitHandle.WaitOne(3000) -and $c.Connected
     $c.Close()
 } catch { }
-if (-not $tcpOk) { Write-Warning 'Voltra TCP 10086 is not listening yet. Check service.log.' }
+if (-not $tcpOk) { Fail 'Voltra TCP 10086 is not listening. Check service.log before using the system.' }
 
 Step 'Opening PlayZone Manager'
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File $Launcher
