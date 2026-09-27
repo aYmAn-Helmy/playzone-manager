@@ -29,7 +29,7 @@
             <Border x:Name="OfflinePanel" Background="#07111F">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Width="440">
                     <TextBlock Text="PlayZone Manager" Foreground="#EEF6FF" FontSize="34" FontWeight="Bold" HorizontalAlignment="Center"/>
-                    <TextBlock Text="جاري الاتصال بخدمة PlayZone المحلية..." Foreground="#91A4BA" FontSize="16" Margin="0,12,0,24" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="OfflineMessage" Text="جاري الاتصال بخدمة PlayZone المحلية..." Foreground="#91A4BA" FontSize="16" Margin="0,12,0,24" HorizontalAlignment="Center"/>
                     <TextBlock x:Name="ErrorText" TextWrapping="Wrap" Foreground="#FFB1B1" TextAlignment="Center"/>
                     <Button Content="إعادة المحاولة" Click="Retry_Click" Margin="0,20,0,0" Padding="18,10" Background="#1473E6" Foreground="White" BorderThickness="0"/>
                 </StackPanel>

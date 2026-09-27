@@ -26,6 +26,7 @@ public partial class MainWindow : Window
     private async Task ConnectAsync()
     {
         SetStatus(false, "Connecting to Local Edge...");
+        OfflineMessage.Text = "جاري الاتصال بخدمة PlayZone المحلية...";
         ErrorText.Text = "";
 
         for (var attempt = 1; attempt <= 20 && !_closing.IsCancellationRequested; attempt++)
@@ -60,13 +61,30 @@ public partial class MainWindow : Window
         }
 
         SetStatus(false, "Local Edge Offline");
+        OfflineMessage.Text = "Local Edge Offline";
         OfflinePanel.Visibility = Visibility.Visible;
         Browser.Visibility = Visibility.Collapsed;
     }
 
     private async Task OpenLocalUiAsync()
     {
-        await Browser.EnsureCoreWebView2Async();
+        try
+        {
+            await Browser.EnsureCoreWebView2Async();
+        }
+        catch (Exception ex)
+        {
+            SetStatus(false, "WebView2 Runtime Missing");
+            OfflineMessage.Text = "WebView2 Runtime is required";
+            ErrorText.Text =
+                "Microsoft Edge WebView2 Runtime is not installed or could not start.\n" +
+                "Please install WebView2 Runtime, then click Retry.\n\n" +
+                ex.Message;
+            OfflinePanel.Visibility = Visibility.Visible;
+            Browser.Visibility = Visibility.Collapsed;
+            return;
+        }
+
         Browser.CoreWebView2.Settings.AreDevToolsEnabled = false;
         Browser.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
         Browser.Source = LocalUi;
