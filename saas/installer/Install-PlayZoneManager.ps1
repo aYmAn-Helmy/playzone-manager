@@ -39,7 +39,9 @@ Write-Host 'PlayZone Manager v0.28 SaaS Prototype' -ForegroundColor Green
 Write-Host 'This installer requires Internet only during first-time local Python setup and Cloud activation.'
 
 Step 'Stopping previous Edge instance'
-schtasks.exe /End /TN $TaskName 2>$null | Out-Null
+# First-time installs do not have the task yet. Ignore that expected condition.
+& cmd.exe /d /c "schtasks.exe /End /TN \"$TaskName\" >nul 2>&1"
+$global:LASTEXITCODE = 0
 Start-Sleep -Milliseconds 500
 
 Step 'Copying PlayZone Manager files'
