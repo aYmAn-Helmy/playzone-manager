@@ -46,6 +46,55 @@ def create_customer(client, admin_headers, name, username):
     return r.json()
 
 
+def test_activation_recovers_an_already_registered_machine(tmp_path):
+    app = load_app(tmp_path)
+    with TestClient(app) as client:
+        admin = auth(client, "platform", "ChangeMe-123!")
+        customer = create_customer(client, admin, "Game Zone", "owner-a")
+        tenant_id = customer["customer"]["id"]
+
+        def new_installation_code():
+            response = client.post(
+                f"/api/admin/tenants/{tenant_id}/installation-codes",
+                headers=admin,
+                json={"expires_hours": 24},
+            )
+            assert response.status_code == 200, response.text
+            return response.json()["installation_code"]
+
+        machine = {
+            "device_name": "GameZone-PC",
+            "machine_fingerprint": "machine-fingerprint-A-0001",
+            "app_version": "0.28.2",
+        }
+        first = client.post(
+            "/api/edge/activate",
+            json={"installation_code": new_installation_code(), **machine},
+        )
+        assert first.status_code == 201, first.text
+        first_device = first.json()
+
+        recovered = client.post(
+            "/api/edge/activate",
+            json={"installation_code": new_installation_code(), **machine},
+        )
+        assert recovered.status_code == 201, recovered.text
+        recovered_device = recovered.json()
+        assert recovered_device["device_id"] == first_device["device_id"]
+        assert recovered_device["device_token"] != first_device["device_token"]
+
+        old_headers = {
+            "Authorization": f"Bearer {first_device['device_token']}",
+            "X-Device-ID": first_device["device_id"],
+        }
+        new_headers = {
+            "Authorization": f"Bearer {recovered_device['device_token']}",
+            "X-Device-ID": recovered_device["device_id"],
+        }
+        assert client.post("/api/edge/heartbeat", headers=old_headers, json={}).status_code == 401
+        assert client.post("/api/edge/heartbeat", headers=new_headers, json={}).status_code == 200
+
+
 def test_tenant_device_and_event_isolation(tmp_path):
     app = load_app(tmp_path)
     with TestClient(app) as client:

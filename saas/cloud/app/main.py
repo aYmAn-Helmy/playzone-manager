@@ -619,22 +619,29 @@ def activate_edge(body: EdgeActivateRequest, db: Annotated[Session, Depends(get_
             EdgeDevice.machine_fingerprint == body.machine_fingerprint,
         )
     )
-    if duplicate:
-        raise HTTPException(status_code=409, detail="this machine is already registered")
-    device_id = "EDG-" + secrets.token_hex(12).upper()
     token = new_secret(32)
-    edge = EdgeDevice(
-        id=device_id,
-        tenant_id=tenant.id,
-        branch_id=branch.id,
-        device_name=body.device_name.strip(),
-        machine_fingerprint=body.machine_fingerprint,
-        token_hash=secret_hash(token),
-        status="ACTIVE",
-        app_version=body.app_version,
-        last_seen_at=utcnow(),
-    )
-    db.add(edge)
+    if duplicate:
+        edge = duplicate
+        edge.branch_id = branch.id
+        edge.device_name = body.device_name.strip()
+        edge.token_hash = secret_hash(token)
+        edge.status = "ACTIVE"
+        edge.app_version = body.app_version
+        edge.last_seen_at = utcnow()
+        edge.revoked_at = None
+    else:
+        edge = EdgeDevice(
+            id="EDG-" + secrets.token_hex(12).upper(),
+            tenant_id=tenant.id,
+            branch_id=branch.id,
+            device_name=body.device_name.strip(),
+            machine_fingerprint=body.machine_fingerprint,
+            token_hash=secret_hash(token),
+            status="ACTIVE",
+            app_version=body.app_version,
+            last_seen_at=utcnow(),
+        )
+        db.add(edge)
     code.used_at = utcnow()
     db.commit()
     return {

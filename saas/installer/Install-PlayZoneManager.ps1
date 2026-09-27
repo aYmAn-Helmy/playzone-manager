@@ -105,8 +105,20 @@ if (-not $SkipCloudActivation) {
 
     Push-Location (Join-Path $RuntimeDest 'backend')
     try {
-        & $Python -m app.edge_runtime activate --cloud-url $CloudUrl.TrimEnd('/') --installation-code $InstallationCode.Trim()
-        if ($LASTEXITCODE -ne 0) { throw "Cloud activation failed with exit code $LASTEXITCODE" }
+        $NormalizedCloudUrl = $CloudUrl.TrimEnd('/')
+        $StatusJson = & $Python -m app.edge_runtime status
+        $StatusExitCode = $LASTEXITCODE
+        $ExistingActivation = $null
+        if ($StatusExitCode -eq 0) {
+            try { $ExistingActivation = $StatusJson | ConvertFrom-Json } catch { }
+        }
+
+        if ($ExistingActivation.activated -and $ExistingActivation.cloud_url.TrimEnd('/') -eq $NormalizedCloudUrl) {
+            Write-Host "This PC is already linked to device $($ExistingActivation.device_id); keeping the existing activation."
+        } else {
+            & $Python -m app.edge_runtime activate --cloud-url $NormalizedCloudUrl --installation-code $InstallationCode.Trim()
+            if ($LASTEXITCODE -ne 0) { throw "Cloud activation failed with exit code $LASTEXITCODE" }
+        }
     } finally {
         Pop-Location
     }
