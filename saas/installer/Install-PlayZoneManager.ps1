@@ -40,7 +40,7 @@ Write-Host 'This installer requires Internet only during first-time local Python
 
 Step 'Stopping previous Edge instance'
 # First-time installs do not have the task yet. Ignore that expected condition.
-& cmd.exe /d /c "schtasks.exe /End /TN \"$TaskName\" >nul 2>&1"
+& cmd.exe /d /c ('schtasks.exe /End /TN "{0}" >nul 2>&1' -f $TaskName) | Out-Null
 $global:LASTEXITCODE = 0
 Start-Sleep -Milliseconds 500
 
