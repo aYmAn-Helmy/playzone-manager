@@ -39,12 +39,14 @@ jobs:
           '@ | Set-Content payload\requirements-offline.txt -Encoding ASCII
           python -m pip download --dest payload\wheels --only-binary=:all: -r payload\requirements-offline.txt
 
-      - name: Parse PowerShell bootstrap
+      - name: Parse PowerShell installer scripts
         shell: pwsh
         run: |
-          $errors=$null
-          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'service-v027-ci\Bootstrap-Portable.ps1'),[ref]$null,[ref]$errors) | Out-Null
-          if ($errors.Count) { $errors | Format-List | Out-String | Write-Error; exit 1 }
+          foreach($script in @('service-v027-ci\Bootstrap-Portable.ps1','service-v027-ci\Install-PlayZone-Service.ps1')) {
+            $errors=$null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script),[ref]$null,[ref]$errors) | Out-Null
+            if ($errors.Count) { $errors | Format-List | Out-String | Write-Error; exit 1 }
+          }
 
       - name: Prepare service test under Program Files path
         shell: pwsh
