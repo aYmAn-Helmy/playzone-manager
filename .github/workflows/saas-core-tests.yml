@@ -38,6 +38,12 @@ jobs:
       - run: pip install -r requirements.txt
       - run: PYTHONPATH=. pytest -q
       - run: python -m py_compile integration/v027_edge_runtime.py integration/v027_edge_commands.py integration/apply_to_v027.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PlayZoneManager-Edge-Packaging-Sources
+          path: |
+            saas/edge/integration/**
+            saas/installer/**
 
   desktop:
     runs-on: windows-latest
