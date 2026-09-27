@@ -35,6 +35,7 @@ jobs:
           tzdata==2026.4
           argon2-cffi==25.1.0
           pywin32==311
+          pip==25.2
           '@ | Set-Content payload\requirements-offline.txt -Encoding ASCII
           python -m pip download --dest payload\wheels --only-binary=:all: -r payload\requirements-offline.txt
 
