@@ -1,0 +1,50 @@
+PlayZone Manager v0.31 - Remote Support Edition
+================================================
+
+الأمان / ROOT
+-------------
+- إلغاء ROOT passwordless بشكل دفاعي داخل الـBackend حتى لو تم تغيير development flag لاحقاً.
+- القيمة الافتراضية development_passwordless_privileged أصبحت 0.
+- أول تثبيت أو ترقية من نسخة قديمة بدون marker أمان يطلب ROOT Password من Installer.
+- الحد الأدنى لكلمة مرور ROOT هو 12 حرفاً.
+- كلمة المرور تُمرر إلى أداة الإعداد عبر stdin ولا توضع في command line أو logs.
+- إضافة Setup-Root-Password.ps1 لتغيير/استرجاع ROOT Password محلياً بواسطة Windows Administrator.
+- تغيير ROOT Password يلغي ROOT login tokens القديمة.
+
+Remote Support / Tailscale Serve
+--------------------------------
+- الـWeb Backend ما زال يستمع على 127.0.0.1:8000 فقط.
+- إضافة Tailscale Serve private HTTPS إلى http://127.0.0.1:8000.
+- Serve يتم تشغيله بخلفية persistent باستخدام --bg.
+- لا يتم استخدام Tailscale Funnel.
+- إضافة API آمن خاص بـROOT:
+  * GET  /api/root/tailscale/status
+  * POST /api/root/tailscale/provision
+  * POST /api/root/tailscale/reconnect
+  * POST /api/root/tailscale/enable
+  * POST /api/root/tailscale/disable
+- Status يعرض: Connected, Tailscale IP, DNS Name, Always-On, Serve state, Remote URL.
+- Disable Remote Access يزيل HTTPS 443 الخاص بـPlayZone فقط ولا يعمل reset لباقي Serve config.
+- Watchdog يحافظ على Tailscale daemon شغال لكنه لا يعيد Enable للـServe بعد أن يقوم ROOT بإيقافه يدوياً.
+
+واجهة ROOT
+----------
+- تحديث Remote Support card لعرض Serve Active/Disabled وRemote URL.
+- إضافة Enable Remote Access.
+- إضافة Disable Remote Access.
+- إضافة Reconnect Tailscale.
+- إضافة Refresh Status.
+- Remote URL يظهر كرابط HTTPS مباشر عندما يكون Serve فعالاً.
+
+Setup
+-----
+- Setup-Tailscale-Support.bat يطلب Administrator تلقائياً.
+- Setup-Tailscale-Support.ps1 يضبط Tailscale service على Automatic/Recovery ثم يربط الجهاز ويشغل Serve.
+- اسم Tailscale للجهاز يصبح playzone-<computername> عند الإعداد.
+- Tag اختياري مدعوم من PowerShell عبر -Tag tag:playzone-client.
+- إضافة REMOTE-SUPPORT-SETUP-AR.txt مع نموذج Tailscale Grants يسمح لحساب الدعم فقط بالوصول إلى tag:playzone-client على 443.
+
+متوافق مع
+---------
+- نفس SQLite/الجلسات/الفواتير/Voltra/طرق الدفع/عدد الأجهزة الموجودة في v0.30.
+- ProgramData لا يتم حذفه أثناء Upgrade.

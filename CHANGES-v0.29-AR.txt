@@ -1,0 +1,7 @@
+PlayZone Manager v0.29 Client Final
+- ROOT: إضافة Tailscale Auth Key من داخل Remote Support عند الحاجة للتهيئة.
+- Auth Key يستخدم لحظياً فقط ولا يحفظ في قاعدة البيانات أو System Logs.
+- تمرير المفتاح إلى Tailscale عبر ملف مؤقت ثم حذفه لتجنب ظهوره في command line.
+- ROOT: إضافة System Logs تعرض آخر 500 عملية مسجلة في Audit Log.
+- تسجيل نجاح/فشل Provision بدون تسجيل المفتاح.
+- الإبقاء على Always-On / Reconnect الموجود في v0.28.

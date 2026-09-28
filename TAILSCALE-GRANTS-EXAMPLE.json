@@ -1,0 +1,20 @@
+{
+  "tagOwners": {
+    "tag:playzone-client": [
+      "YOUR_SUPPORT_EMAIL@example.com"
+    ]
+  },
+  "grants": [
+    {
+      "src": [
+        "YOUR_SUPPORT_EMAIL@example.com"
+      ],
+      "dst": [
+        "tag:playzone-client"
+      ],
+      "ip": [
+        "443"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,84 @@
+PlayZone Manager v0.31 - Remote Support Edition
+================================================
+
+الفكرة الأمنية
+--------------
+- PlayZone Web Backend يظل على 127.0.0.1:8000 فقط.
+- لا يتم فتح Port 8000 على الراوتر أو LAN.
+- Remote Support يستخدم Tailscale Serve HTTPS داخل الـTailnet فقط.
+- لا تستخدم Tailscale Funnel لهذا النظام.
+- ROOT لا يمكنه الدخول بدون Password في v0.31.
+
+أول تثبيت / ترقية من v0.30
+---------------------------
+1) شغّل Install-PlayZone-Service.bat كمسؤول.
+2) إذا لم يكن ROOT مؤمناً من قبل، سيطلب Installer كلمة مرور ROOT جديدة.
+   الحد الأدنى 12 حرفاً.
+3) كلمة المرور لا يتم وضعها في Command Line ولا يتم تسجيلها في Logs.
+4) عند ترقية قاعدة v0.30 القديمة، سيطلب v0.31 إنشاء ROOT Password مرة واحدة.
+
+إعداد Tailscale Remote Support
+-------------------------------
+1) ثبّت Tailscale على جهاز العميل.
+2) شغّل Setup-Tailscale-Support.bat كمسؤول.
+3) أكمل ربط الجهاز بالـTailnet إذا طُلب منك ذلك.
+4) السكربت ينفذ Private Serve إلى:
+   http://127.0.0.1:8000
+   عبر HTTPS على Tailscale فقط.
+5) بعد نجاح الإعداد سيظهر رابط مثل:
+   https://playzone-client-pc.<tailnet>.ts.net
+
+من داخل ROOT
+------------
+صفحة ROOT تعرض:
+- Connected
+- Tailscale IP
+- Tailscale DNS Name
+- Always-On
+- Serve Active / Disabled
+- Remote URL
+
+الأزرار:
+- Enable Remote Access
+- Disable Remote Access
+- Reconnect Tailscale
+- Refresh Status
+
+Tag مقترح
+---------
+tag:playzone-client
+
+يمكن تمرير Tag يدوياً إلى PowerShell:
+  powershell -ExecutionPolicy Bypass -File .\Setup-Tailscale-Support.ps1 -Tag tag:playzone-client
+
+يجب أن تسمح سياسة الـTailnet لهذا الجهاز باستخدام الـTag.
+
+نموذج Tailscale Grants (عدّل البريد قبل الاستخدام)
+---------------------------------------------------
+يوجد أيضاً ملف جاهز للتعديل: TAILSCALE-GRANTS-EXAMPLE.json
+{
+  "tagOwners": {
+    "tag:playzone-client": ["YOUR_SUPPORT_EMAIL@example.com"]
+  },
+  "grants": [
+    {
+      "src": ["YOUR_SUPPORT_EMAIL@example.com"],
+      "dst": ["tag:playzone-client"],
+      "ip": ["443"]
+    }
+  ]
+}
+
+الفكرة: حساب الدعم المحدد فقط يصل إلى أجهزة العملاء المعلّمة tag:playzone-client على HTTPS 443.
+ادمج هذا الجزء مع policy الحالية ولا تستبدل policy كاملة بدون مراجعة.
+
+إيقاف Remote Support
+--------------------
+من ROOT اضغط Disable Remote Access.
+أو من Administrator Terminal:
+  tailscale serve --https=443 off
+
+استرجاع/تغيير ROOT Password محلياً
+-----------------------------------
+شغّل Setup-Root-Password.bat كمسؤول على جهاز العميل.
+هذا الإجراء يحتاج صلاحية Windows Administrator محلية ويلغي ROOT login tokens القديمة.

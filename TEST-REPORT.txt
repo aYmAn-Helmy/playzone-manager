@@ -1,0 +1,42 @@
+PlayZone Manager v0.31 Remote Support Edition - Validation Report
+=================================================================
+Build target: 0.31-remote-support
+
+Validation performed in this build environment
+----------------------------------------------
+[PASS] Python compileall for backend source.
+[PASS] Frontend JavaScript syntax check with Node.js.
+[PASS] Windows service source still binds Web UI to 127.0.0.1:8000.
+[PASS] Fresh ROOT setup reports setup-required before password initialization.
+[PASS] ROOT password setup writes Argon2 password hash and root_password_initialized=1.
+[PASS] development_passwordless_privileged is forced to 0 by ROOT setup.
+[PASS] Blank ROOT password is rejected.
+[PASS] Configured ROOT password is accepted.
+[PASS] Tailscale Serve status JSON parser detects proxy http://127.0.0.1:8000.
+[PASS] Remote URL is derived as HTTPS tailnet DNS name.
+[PASS] Enable Remote Access issues: tailscale serve --bg --yes --https=443 http://127.0.0.1:8000
+[PASS] Disable Remote Access issues: tailscale serve --https=443 off
+[PASS] Tailscale watchdog does not silently re-enable Serve after ROOT disables it.
+[PASS] Frontend asset paths changed to v031 to avoid stale cached JS/CSS.
+
+Security boundaries
+-------------------
+- Tailscale Funnel is not called by PlayZone v0.31.
+- Port 8000 is not opened by the installer firewall rules.
+- Voltra TCP 10086 keeps its existing Private-network firewall rule.
+- Tailscale Auth Key handling from v0.30 remains temporary/non-persistent.
+- ROOT password is never passed in a process command-line argument by the installer.
+
+Windows-specific validation boundary
+------------------------------------
+This build environment is not Windows, so the edited PowerShell installer and the real
+Tailscale Windows service/Serve flow could not be executed end-to-end here. The original
+v0.30 package already contained the Windows Service/offline runtime structure; v0.31 keeps
+that structure and changes the ROOT/Tailscale setup logic. Before a customer rollout,
+perform one clean install and one v0.30 -> v0.31 upgrade on a Windows test PC, then verify:
+1) Windows Service starts after reboot.
+2) ROOT login requires the configured password.
+3) Local UI opens only on 127.0.0.1:8000.
+4) Tailscale Serve shows the expected https://...ts.net URL.
+5) The URL is reachable from an authorized support device and not from an unauthorized one.
+6) Disable Remote Access removes the Serve endpoint while local PlayZone continues running.

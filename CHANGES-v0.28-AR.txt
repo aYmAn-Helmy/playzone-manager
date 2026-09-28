@@ -1,0 +1,17 @@
+PlayZone Manager v0.28 - Client Final
+
+1) PlayStation icon
+- Desktop / Start / Startup shortcuts use PlayStation.ico.
+- Web app favicon uses the same PlayStation icon for the Edge app window/taskbar.
+
+2) ROOT device count
+- ROOT Settings now shows the current device count and a "تغيير عدد الأجهزة" button.
+- Range: 1 to 100 devices.
+- Reducing devices safely disables extra stations instead of deleting billing/session history.
+- Increasing re-enables disabled stations first, then creates new PS4-XX stations.
+- Reduction is blocked if a station being removed has an active session.
+
+3) Tailscale Always-On
+- If Tailscale is installed, installer sets its Windows service to Automatic and configures restart-on-failure.
+- PlayZone Manager service checks Tailscale every 60 seconds and attempts recovery/reconnect.
+- Setup-Tailscale-Support.bat configures unattended mode. First Tailnet login still requires one-time authentication if the PC has never been registered.
