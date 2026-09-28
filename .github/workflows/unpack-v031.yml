@@ -23,7 +23,18 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/playzone-v031
-          cat releases/v0.31/source.tar.xz.b64.part* | base64 --decode > /tmp/playzone-v031/source.tar.xz
+          python - <<'PY'
+          import base64
+          import glob
+          from pathlib import Path
+
+          parts = sorted(glob.glob("releases/v0.31/source.tar.xz.b64.part*"))
+          if not parts:
+              raise SystemExit("No v0.31 source bundle parts found")
+          encoded = "".join(Path(p).read_text(encoding="utf-8") for p in parts)
+          encoded = "".join(encoded.split())
+          Path("/tmp/playzone-v031/source.tar.xz").write_bytes(base64.b64decode(encoded, validate=False))
+          PY
           xz -t /tmp/playzone-v031/source.tar.xz
           mkdir -p /tmp/playzone-v031/extracted
           tar -xJf /tmp/playzone-v031/source.tar.xz -C /tmp/playzone-v031/extracted
