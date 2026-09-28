@@ -1,0 +1,60 @@
+name: Unpack PlayZone v0.31 source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/unpack-v031.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct and unpack v0.31 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/playzone-v031
+          cat releases/v0.31/source.tar.xz.b64.part* | base64 --decode > /tmp/playzone-v031/source.tar.xz
+          xz -t /tmp/playzone-v031/source.tar.xz
+          mkdir -p /tmp/playzone-v031/extracted
+          tar -xJf /tmp/playzone-v031/source.tar.xz -C /tmp/playzone-v031/extracted
+
+          mapfile -t top_entries < <(find /tmp/playzone-v031/extracted -mindepth 1 -maxdepth 1 -printf '%p\n')
+          src="/tmp/playzone-v031/extracted"
+          if [ "${#top_entries[@]}" -eq 1 ] && [ -d "${top_entries[0]}" ]; then
+            src="${top_entries[0]}"
+          fi
+
+          rsync -a "${src}/" ./
+
+          test -f VERSION.txt
+          grep -qx "0.31" VERSION.txt
+          test -f backend/app/main.py
+          test -f backend/app/tailscale_support.py
+          test -f frontend/dist/assets/index-v031.js
+          test -f Setup-Root-Password.bat
+          test -f Setup-Tailscale-Support.bat
+
+      - name: Commit unpacked v0.31 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm --ignore-unmatch .github/workflows/unpack-v031.yml
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No source changes to commit."
+            exit 0
+          fi
+          git commit -m "Unpack PlayZone Manager v0.31 source"
+          git push origin HEAD:main
