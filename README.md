@@ -1,50 +1,51 @@
 # PlayZone Manager
 
-Current deployment baseline: **v0.23**.
+Current Windows client baseline: **v0.31 Remote Support Edition**.
 
-PlayZone Manager is the cashier/session-management application with embedded Voltra screen-power management.
+PlayZone Manager is the cashier/session-management application with embedded Voltra screen-power management and ROOT-only remote support.
 
-## v0.23 performance update
-- Replaces the one-second server polling loop with a local one-second UI timer, station refresh every 5 seconds, and dashboard/shift refresh every 15 seconds.
-- Actions refresh station state immediately, while secondary dashboard/page refreshes continue without keeping the action button blocked.
-- Session start/end no longer wait for Voltra power commands; display power work runs in a background best-effort job after the financial/session state is committed.
-- Station power state is read from one Voltra overview request instead of one HTTP request per station.
-- Removes the active-session and dashboard N+1 query patterns by loading active sessions in bulk and using SQL counts.
-- Timed-session snapshots include a server timestamp and continue counting down smoothly in the browser between server refreshes.
-- API version is **0.23.0** and frontend assets are cache-busted to v0.23.
+## v0.31 highlights
 
-### v0.23 validation
-Local regression testing covered ROOT login/activation, OPEN and TIMED start/end, pause/resume, timed extension, automatic expiry, payment/end flow, and the optimized station refresh path. A simulated 1.2-second Voltra delay remained off the cashier action critical path.
+- ROOT password is mandatory. ROOT cannot use the development passwordless privileged path.
+- The local PlayZone backend remains bound to `127.0.0.1:8000`.
+- Remote support uses **Tailscale Serve** over Tailnet-only HTTPS and proxies to `http://127.0.0.1:8000`.
+- No router port-forwarding, public listener, or Tailscale Funnel is required.
+- ROOT UI shows Tailscale connection status, Tailnet IP, DNS name, Always-On status, Serve status, and the Remote URL.
+- ROOT UI includes Enable Remote Access, Disable Remote Access, Reconnect Tailscale, and Refresh Status actions.
+- A local Windows Administrator can set/reset the ROOT password using `Setup-Root-Password.bat`.
+- Tailscale setup is available through `Setup-Tailscale-Support.bat`.
+- Existing session, billing, payment, and Voltra logic from the v0.30 client is preserved.
 
-## v0.22 hotfix
-- Fixes the blank/dark-screen React crash when a TIMED session becomes visible.
-- Corrects the `+ وقت` timer icon to render the Lucide React component instead of the raw icon definition object.
-- Cache-busts frontend assets to `index-v022.js` / `index-v022.css`.
-- No billing, session-total, Voltra, or Tailscale behavior is changed by this hotfix.
+See `CHANGES-v0.31-AR.txt` for the v0.31 change summary.
 
-## v0.21 highlights
-- ROOT-only Always-On Tailscale remote-support status and reconnect control.
-- Tailscale support information is hidden from ADMIN and all other users.
-- Windows customer deployments use Tailscale Run Unattended so remote support remains available after logoff/restart.
-- One-time provisioning uses a one-off, pre-approved tagged auth key; PlayZone does not store the auth key.
-- Support clients use the default device tag `tag:playzone-client`.
-- Open sessions and timed sessions with configurable presets.
-- ROOT-managed payment methods and customer UI visibility profile.
-- Voltra strip discovery/adoption, mapping, power automation and ROOT-only management.
+## Windows client
 
-## Tailscale customer setup
-Run `Setup-Tailscale-Support.bat` once as Administrator on the customer Windows PC. The setup downloads the latest stable Windows MSI if needed and configures Tailscale with:
-- `--unattended=true`
-- `--accept-dns=false`
-- `--accept-routes=false`
-- a PlayZone-specific hostname
-- `tag:playzone-client`
+Version is stored in `VERSION.txt`.
 
-The Tailscale auth key is requested interactively for the one-time registration and is not saved in the PlayZone application.
+Main Windows service/runtime files include:
 
-## Railway
-The production/staging service listens on web port `8080`. Embedded Voltra listens internally on HTTP `127.0.0.1:8086` and on TCP `10086` for strips.
+- `backend/`
+- `frontend/dist/`
+- `offline-runtime/`
+- `Install-PlayZone-Service.bat`
+- `Setup-Root-Password.bat`
+- `Setup-Tailscale-Support.bat`
 
-Tailscale customer remote support is Windows-local functionality; Railway/Linux reports it as unsupported rather than attempting to register the cloud container.
+## Remote support design
 
-Billing/session financial operations remain independent of Voltra and Tailscale availability.
+```text
+PlayZone backend
+127.0.0.1:8000
+      |
+      v
+Tailscale Serve
+      |
+      v  HTTPS inside the Tailnet
+https://<client-name>.<tailnet>.ts.net
+```
+
+The application backend is intentionally not exposed on `0.0.0.0:8000`.
+
+## Railway / historical staging files
+
+The repository still contains the earlier Railway/staging support files and historical runtime patches for compatibility and reference. The Windows client source under `backend/` and `frontend/` is now at **v0.31**.
