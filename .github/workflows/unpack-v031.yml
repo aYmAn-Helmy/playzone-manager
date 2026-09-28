@@ -33,7 +33,7 @@ jobs:
               raise SystemExit("No v0.31 source bundle parts found")
           chunks = ["".join(Path(p).read_text(encoding="utf-8").split()) for p in parts]
           if len(chunks) > 2 and len(chunks[2]) == 18001:
-              chunks[2] = chunks[2][:18000]
+              chunks[2] = chunks[2][1:]
           encoded = "".join(chunks)
           Path("/tmp/playzone-v031/source.tar.xz").write_bytes(base64.b64decode(encoded, validate=False))
           PY
