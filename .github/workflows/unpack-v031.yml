@@ -26,38 +26,15 @@ jobs:
           python - <<'PY'
           import base64
           import glob
+          import lzma
           from pathlib import Path
 
           parts = sorted(glob.glob("releases/v0.31/source.tar.xz.b64.part*"))
           if not parts:
               raise SystemExit("No v0.31 source bundle parts found")
-          import lzma
-          chunks = ["".join(Path(p).read_text(encoding="utf-8").split()) for p in parts]
-          encoded = "".join(chunks)
-          try:
-              archive = base64.b64decode(encoded, validate=True)
-              lzma.decompress(archive)
-          except Exception:
-              if len(chunks) <= 2 or len(chunks[2]) != 18001:
-                  raise
-              prefix = "".join(chunks[:2])
-              bad = chunks[2]
-              suffix = "".join(chunks[3:])
-              archive = None
-              for i in range(len(bad)):
-                  candidate = prefix + bad[:i] + bad[i + 1:] + suffix
-                  try:
-                      decoded = base64.b64decode(candidate, validate=True)
-                      lzma.decompress(decoded)
-                  except Exception:
-                      if i and i % 2000 == 0:
-                          print(f"Checked {i} repair positions...")
-                      continue
-                  print(f"Repaired corrupted base64 chunk at part02 character {i}")
-                  archive = decoded
-                  break
-              if archive is None:
-                  raise SystemExit("Could not repair v0.31 source bundle")
+          encoded = "".join("".join(Path(p).read_text(encoding="utf-8").split()) for p in parts)
+          archive = base64.b64decode(encoded, validate=True)
+          lzma.decompress(archive)
           Path("/tmp/playzone-v031/source.tar.xz").write_bytes(archive)
           PY
           xz -t /tmp/playzone-v031/source.tar.xz
