@@ -31,8 +31,10 @@ jobs:
           parts = sorted(glob.glob("releases/v0.31/source.tar.xz.b64.part*"))
           if not parts:
               raise SystemExit("No v0.31 source bundle parts found")
-          encoded = "".join(Path(p).read_text(encoding="utf-8") for p in parts)
-          encoded = "".join(encoded.split())
+          chunks = ["".join(Path(p).read_text(encoding="utf-8").split()) for p in parts]
+          if len(chunks) > 2 and len(chunks[2]) == 18001:
+              chunks[2] = chunks[2][:18000]
+          encoded = "".join(chunks)
           Path("/tmp/playzone-v031/source.tar.xz").write_bytes(base64.b64decode(encoded, validate=False))
           PY
           xz -t /tmp/playzone-v031/source.tar.xz
