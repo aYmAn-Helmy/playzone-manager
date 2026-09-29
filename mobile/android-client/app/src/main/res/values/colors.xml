@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="abo_bg">#07111F</color>
+    <color name="abo_surface">#0D1C2E</color>
+    <color name="abo_primary">#168CFF</color>
+    <color name="abo_text">#F4F8FF</color>
+</resources>

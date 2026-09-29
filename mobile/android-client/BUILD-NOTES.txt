@@ -1,0 +1,4 @@
+abo_aYmAn Mobile v0.1
+Package: com.aboayman.mobile
+Purpose: Manage multiple customer installations through their Tailscale Serve HTTPS URLs.
+Build type: Debug APK for first field test.
