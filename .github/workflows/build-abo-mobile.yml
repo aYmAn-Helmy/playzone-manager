@@ -1,0 +1,85 @@
+name: Build abo_aYmAn Mobile APK
+
+on:
+  push:
+    branches: [abo_aYmAn-mobile]
+    paths:
+      - ".github/workflows/build-abo-mobile.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore mobile source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p mobile/android-client
+          base64 -d mobile-src.zip.b64 > /tmp/abo-mobile-source.zip
+          unzip -q /tmp/abo-mobile-source.zip -d mobile/android-client
+          rm -f mobile-src.zip.b64
+          sed -i 's/minSdk 26/minSdk 27/' mobile/android-client/app/build.gradle
+          sed -i '/android:fullBackupContent="true"/d' mobile/android-client/app/src/main/AndroidManifest.xml
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Build APK
+        working-directory: mobile/android-client
+        run: gradle --no-daemon :app:assembleDebug
+
+      - name: Validate APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="mobile/android-client/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | head -n 8
+          mkdir -p mobile/releases
+          cp "$APK" mobile/releases/abo_aYmAn-Mobile-v0.1-debug.apk
+          sha256sum mobile/releases/abo_aYmAn-Mobile-v0.1-debug.apk > mobile/releases/abo_aYmAn-Mobile-v0.1-debug.apk.sha256
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: abo_aYmAn-Mobile-v0.1
+          path: |
+            mobile/releases/abo_aYmAn-Mobile-v0.1-debug.apk
+            mobile/releases/abo_aYmAn-Mobile-v0.1-debug.apk.sha256
+            mobile/android-client/README.md
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Commit mobile source and test APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/build-abo-mobile.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Add abo_aYmAn Mobile customer manager APK"
+          git push origin HEAD:abo_aYmAn-mobile
