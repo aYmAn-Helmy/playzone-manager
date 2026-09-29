@@ -1,0 +1,80 @@
+name: Finalize abo_aYmAn branding
+
+on:
+  push:
+    branches: [abo_aYmAn]
+    paths:
+      - ".github/workflows/brand-abo-ayman-v2.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  brand:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply visual brand
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          js_path = Path("frontend/dist/assets/index-v031.js")
+          css_path = Path("frontend/dist/assets/index-v031.css")
+          html_path = Path("frontend/dist/index.html")
+
+          js = js_path.read_text(encoding="utf-8")
+          js = js.replace("PlayZone Manager", "abo_aYmAn")
+          js = js.replace("children:`PlayZone`", "children:`abo_aYmAn`")
+          js = js.replace("PLAYZONE / ", "abo_aYmAn / ")
+          js = js.replace("تفعيل PlayZone", "تفعيل abo_aYmAn")
+          js_path.write_text(js, encoding="utf-8")
+
+          css = css_path.read_text(encoding="utf-8")
+          brand_css = r"""
+          .sidebar .brand{height:82px;min-height:82px;padding:0 0 18px;background:url('/abo-ayman-logo.png') no-repeat left top/202px 65px}
+          .sidebar .brand>*{display:none!important}
+          .login-panel:before{content:'';display:block;width:202px;height:65px;max-width:82%;margin:0 auto 12px;background:url('/abo-ayman-logo.png') no-repeat center/contain}
+          .login-panel>.brand-mark,.login-panel>.login-ps-brand{display:none!important}
+          """
+          if "abo-ayman-logo.png" not in css:
+              css += brand_css
+          css_path.write_text(css, encoding="utf-8")
+
+          html = html_path.read_text(encoding="utf-8")
+          html = html.replace("<title>PlayZone Manager</title>", "<title>abo_aYmAn — PlayZone Manager</title>")
+          html_path.write_text(html, encoding="utf-8")
+
+          Path("BRAND.txt").write_text("abo_aYmAn\nPlayZone Manager branded edition\nBase version: 0.31\n", encoding="utf-8")
+          Path("BRANDING-abo_aYmAn.md").write_text(
+              "# abo_aYmAn branded edition\n\n"
+              "Separate branded branch based on PlayZone Manager v0.31.\n"
+              "Original main branch is unchanged.\n"
+              "Only product-facing branding is changed; backend service/data compatibility is preserved.\n",
+              encoding="utf-8"
+          )
+          PY
+
+      - name: Validate
+        shell: bash
+        run: |
+          test -f frontend/dist/abo-ayman-logo.png
+          grep -q "abo_aYmAn" frontend/dist/index.html
+          grep -q "abo_aYmAn" frontend/dist/assets/index-v031.js
+          grep -q "abo-ayman-logo.png" frontend/dist/assets/index-v031.css
+          test -f BRAND.txt
+
+      - name: Commit
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm --ignore-unmatch .github/workflows/brand-abo-ayman.yml
+          git rm --ignore-unmatch .github/workflows/brand-abo-ayman-v2.yml
+          git add -A
+          git commit -m "Create abo_aYmAn branded edition"
+          git push origin HEAD:abo_aYmAn
