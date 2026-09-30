@@ -1,0 +1,102 @@
+name: Sync abo_aYmAn v0.33 from ZIP
+
+on:
+  push:
+    branches: [abo_aYmAn]
+    paths:
+      - ".github/workflows/sync-abo-v033.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct and extract v0.33 source overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat releases/v0.33/source-overlay.part*.b64 | base64 -d > /tmp/v033-source-overlay.tar.xz
+          tar -xJf /tmp/v033-source-overlay.tar.xz -C .
+          test "$(cat VERSION.txt)" = "0.33"
+          test -f backend/app/drinks.py
+          test -f frontend/dist/abo-addon.js
+          test -f frontend/dist/abo-addon.css
+          test -f desktop-shell/main.js
+
+      - name: Rebuild exact offline runtime files from official sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p offline-runtime/wheels
+          curl -fL --retry 3 -o offline-runtime/get-pip.py https://bootstrap.pypa.io/get-pip.py
+          curl -fL --retry 3 -o offline-runtime/python-3.12.6-embed-amd64.zip https://www.python.org/ftp/python/3.12.6/python-3.12.6-embed-amd64.zip
+          python -m pip install --upgrade "pip==25.2"
+          rm -f offline-runtime/wheels/*
+          python -m pip download \
+            --dest offline-runtime/wheels \
+            --only-binary=:all: \
+            --platform win_amd64 \
+            --python-version 312 \
+            --implementation cp \
+            --abi cp312 \
+            -r offline-runtime/requirements-offline.txt
+
+      - name: Verify offline runtime matches shipped v0.33 ZIP
+        working-directory: offline-runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum -c SHA256SUMS.txt
+
+      - name: Remove superseded frontend bundles
+        shell: bash
+        run: |
+          rm -f frontend/dist/assets/index-v031.js frontend/dist/assets/index-v031.css
+
+      - name: Validate source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile backend/app/*.py backend/voltra_local/*.py
+          grep -q "abo-addon.js" frontend/dist/index.html
+          grep -q "abo-addon.css" frontend/dist/index.html
+          grep -q "0.33" VERSION.txt
+          grep -q "drinks" backend/app/main.py
+          grep -q "profile=any remoteip=localsubnet" Install-PlayZone-Service.ps1
+          test -f Uninstall-abo_aYmAn.bat
+          test -f Uninstall-abo_aYmAn.ps1
+
+      - name: Package exact repository v0.33 snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/release
+          zip -qr /tmp/release/abo_aYmAn-v0.33-Responsive-Mobile-GitHub.zip . \
+            -x ".git/*" ".github/workflows/sync-abo-v033.yml" "releases/v0.33/source-overlay.part*.b64"
+          sha256sum /tmp/release/abo_aYmAn-v0.33-Responsive-Mobile-GitHub.zip > /tmp/release/abo_aYmAn-v0.33-Responsive-Mobile-GitHub.zip.sha256
+
+      - name: Upload verified v0.33 snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: abo_aYmAn-v0.33-verified
+          path: /tmp/release/*
+          retention-days: 30
+
+      - name: Commit synchronized v0.33 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/sync-abo-v033.yml
+          rm -f releases/v0.33/source-overlay.part*.b64
+          rmdir releases/v0.33 2>/dev/null || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Sync abo_aYmAn v0.33 Responsive Mobile from release ZIP"
+          git push origin HEAD:abo_aYmAn
