@@ -28,6 +28,11 @@ jobs:
           node --check frontend/dist/playzone-responsive.js
           node --check frontend/dist/assets/index-v031.js
 
+      - name: Install backend validation dependencies
+        shell: pwsh
+        run: |
+          python -m pip install -r backend/requirements.txt
+
       - name: Validate embedded Voltra HTML bridge
         shell: pwsh
         run: |
