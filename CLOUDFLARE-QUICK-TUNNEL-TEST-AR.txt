@@ -1,0 +1,24 @@
+abo_aYmAn - Cloudflare Quick Tunnel Test
+
+الهدف:
+اختبار الإدارة من الموبايل بدون Domain وبدون Tailscale على الموبايل.
+
+الاستخدام الموصى به قبل دمج Cloudflare داخل النسخة الرئيسية:
+1) شغل abo_aYmAn وتأكد أن http://127.0.0.1:8000 يعمل.
+2) شغل Start-Cloudflare-QuickTunnel-Test.ps1.
+3) السكربت ينزل cloudflared الرسمي عند أول تشغيل فقط.
+4) ينتظر رابط من نوع:
+   https://xxxxx.trycloudflare.com
+5) أضف الرابط داخل abo_aYmAn Mobile v0.2 Cloudflare Test.
+6) اختبر Login والجلسات والإدارة من بيانات الموبايل أو شبكة مختلفة.
+7) اضغط Enter في نافذة السكربت لإيقاف الرابط.
+
+ملاحظات:
+- لا يحتاج Domain.
+- لا يحتاج Port Forwarding أو Public IP.
+- الرابط مؤقت وعشوائي.
+- Quick Tunnel للتجربة فقط وليس Production.
+- Login وصلاحيات ROOT/ADMIN/STAFF داخل abo_aYmAn تظل مطلوبة.
+- Tailscale يظل Fallback منفصل.
+
+هذا الـTest Kit لا يغير قاعدة البيانات ولا يعدل Windows Service.
