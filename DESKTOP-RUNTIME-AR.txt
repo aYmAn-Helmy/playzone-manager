@@ -1,0 +1,23 @@
+PlayZone Manager v0.33 - Desktop Browser Runtime
+================================================
+
+النسخة لا تعتمد على Microsoft Edge أو Google Chrome لعرض واجهة البرنامج.
+بعد التثبيت يتم تشغيل الواجهة داخل PlayZone Manager.exe باستخدام Electron/Chromium.
+
+أول تثبيت
+---------
+إذا لم يكن ملف Electron موجوداً داخل مجلد desktop-runtime بجوار الـInstaller،
+يقوم الـInstaller بتنزيل Electron 44.4.5 الرسمي من GitHub ويتحقق من SHA256 قبل التثبيت.
+
+للتثبيت Offline بالكامل
+-----------------------
+ضع الملف:
+  desktop-runtime\electron-v44.4.5-win32-x64.zip
+ثم شغّل Install-PlayZone-Service.bat.
+
+بعد التثبيت
+-----------
+- Shortcut يشغّل PlayZone Manager.exe مباشرة.
+- الـBackend يظل Windows Service على 127.0.0.1:8000.
+- Chromium المدمج يمنع التنقل خارج خدمة PlayZone المحلية.
+- DevTools معطلة داخل تطبيق الكاشير.
