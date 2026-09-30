@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import sqlite3
+import os
+
+import httpx
 import secrets
 import threading
 import time as time_module
@@ -8,7 +11,8 @@ from datetime import date as date_type, datetime, time, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import case, func, select
@@ -30,6 +34,7 @@ from .activation import (
 from .billing import normalize_utc
 from .db import BACKUP_DIR, Base, SessionLocal, engine, get_db, migrate_existing_database
 from .embedded_voltra import start_embedded_voltra, stop_embedded_voltra
+from voltra_local.dashboard import DASHBOARD as VOLTRA_DASHBOARD_HTML
 from .models import AuditLog, AuthToken, CashMovement, Invoice, PlaySession, Product, Shift, Station, SystemSetting, User
 from .schemas import (
     AddItem,
@@ -743,6 +748,84 @@ def update_station(station_id: int, payload: StationUpdate, actor: User = Depend
     db.commit()
     db.refresh(station)
     return _station_out(db, station)
+
+
+# ---- Embedded Voltra console ---------------------------------------------
+
+_VOLTRA_CONSOLE_API = "http://127.0.0.1:8086/voltra/api"
+
+
+def _embedded_voltra_console_html() -> str:
+    """Serve the Voltra dashboard inside PlayZone while keeping data ROOT-only."""
+    html = VOLTRA_DASHBOARD_HTML
+    token_marker = "const token=sessionStorage.getItem('voltraToken')||'';"
+    fetch_marker = "const r=await fetch(path,{...opt,headers});"
+    retry_marker = "if(r.status===401&&retry){const entered=prompt('Voltra API Token');if(entered!==null){sessionStorage.setItem('voltraToken',entered);return api(path,opt,false)}}"
+    if token_marker not in html or fetch_marker not in html or retry_marker not in html:
+        raise RuntimeError("Voltra dashboard API wrapper changed; embedded console patch needs review")
+    html = html.replace(token_marker, "const token=localStorage.getItem('playzone_token')||'';")
+    html = html.replace(
+        fetch_marker,
+        "const proxy=path.replace(/^\\/voltra\\/api/,'/api/root/voltra-console');const r=await fetch(proxy,{...opt,headers});",
+    )
+    html = html.replace(
+        retry_marker,
+        "if(r.status===401)throw new Error('جلسة PlayZone غير صالحة أو الحساب ليس ROOT')",
+    )
+    html = html.replace(
+        "<title>Voltra Power Manager</title>",
+        "<title>PlayZone Manager — Voltra</title>",
+    )
+    return html
+
+
+@app.get("/voltra-console", response_class=HTMLResponse)
+def embedded_voltra_console():
+    # The HTML shell itself contains no customer/device data. Every data/action
+    # request is proxied through a ROOT-authenticated PlayZone API below.
+    return HTMLResponse(_embedded_voltra_console_html(), headers={"Cache-Control": "no-store"})
+
+
+@app.api_route(
+    "/api/root/voltra-console/{subpath:path}",
+    methods=["GET", "POST", "PUT", "DELETE"],
+)
+async def embedded_voltra_console_proxy(
+    subpath: str,
+    request: Request,
+    _: User = Depends(root_ready_user),
+):
+    target = f"{_VOLTRA_CONSOLE_API}/{subpath.lstrip('/')}"
+    body = await request.body()
+    headers: dict[str, str] = {}
+    content_type = request.headers.get("content-type")
+    if content_type:
+        headers["Content-Type"] = content_type
+    voltra_token = os.getenv("VOLTRA_API_TOKEN", "").strip()
+    if voltra_token:
+        headers["Authorization"] = f"Bearer {voltra_token}"
+
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            upstream = await client.request(
+                request.method,
+                target,
+                params=request.query_params,
+                content=body or None,
+                headers=headers,
+            )
+    except httpx.HTTPError as exc:
+        raise HTTPException(503, f"Voltra console unavailable: {exc}") from exc
+
+    response_headers = {"Cache-Control": "no-store"}
+    upstream_type = upstream.headers.get("content-type")
+    if upstream_type:
+        response_headers["Content-Type"] = upstream_type
+    return Response(
+        content=upstream.content,
+        status_code=upstream.status_code,
+        headers=response_headers,
+    )
 
 
 # ---- Voltra power integration -------------------------------------------
