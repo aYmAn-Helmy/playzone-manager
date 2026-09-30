@@ -118,8 +118,7 @@
       ></iframe>
     `;
     panel.querySelector('.pz-voltra-console-close')?.addEventListener('click', closeVoltraConsole);
-    host.insertAdjacentElement('afterend', panel);
-    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.body.appendChild(panel);
   }
 
   function ensureVoltraEmbed() {
