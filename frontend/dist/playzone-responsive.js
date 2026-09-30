@@ -2,7 +2,10 @@
   const tabletQuery = window.matchMedia('(max-width: 1100px)');
   const handsetQuery = window.matchMedia('(max-width: 768px)');
   const privacyKey = 'playzone_dashboard_private_hidden';
+  const privateLabels = new Set(['إجمالي الإيرادات اليوم', 'ساعات اللعب اليوم']);
+  const maskText = '••••••';
   let framePending = false;
+  let scrollDrag = null;
 
   function closeDrawer() {
     document.body?.classList.remove('pz-sidebar-open');
@@ -45,15 +48,39 @@
   function privacyIcon(hidden) {
     return hidden
       ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18M10.6 10.7a2 2 0 0 0 2.7 2.7M9.9 4.2A10.8 10.8 0 0 1 12 4c5.5 0 9 5 9 5a16.8 16.8 0 0 1-3.1 3.7M6.6 6.6C4.3 8 3 10 3 10s3.5 5 9 5c1 0 2-.2 2.8-.5"/></svg>'
-      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12s3.5-5 9-5 9 5 9 5-3.5 5-9 5-9-5-9-5Z"/><circle cx="12" cy="12" r="2.5"/></svg>';
+      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12s3.5-5 9-5 9 5 9 5-3.5 5-9 5-9-5Z"/><circle cx="12" cy="12" r="2.5"/></svg>';
+  }
+
+  function getPrivateStatLabel(stat) {
+    return [...stat.querySelectorAll('span')]
+      .map((span) => span.textContent.trim())
+      .find((text) => privateLabels.has(text)) || '';
   }
 
   function applyPrivacy(hidden) {
     document.querySelectorAll('.stats .stat').forEach((stat) => {
-      const label = stat.querySelector('span')?.textContent.trim() || '';
-      const privateStat = label === 'إجمالي الإيرادات اليوم' || label === 'ساعات اللعب اليوم';
+      const label = getPrivateStatLabel(stat);
+      const privateStat = privateLabels.has(label);
       stat.classList.toggle('pz-private-stat', privateStat);
       stat.classList.toggle('pz-private-stat-hidden', privateStat && hidden);
+      if (!privateStat) return;
+
+      const value = stat.querySelector('strong');
+      if (!value) return;
+
+      const current = value.textContent.trim();
+      if (current && current !== maskText) {
+        value.dataset.pzPrivateValue = current;
+      }
+
+      if (hidden) {
+        if (value.textContent !== maskText) value.textContent = maskText;
+        value.setAttribute('aria-label', 'القيمة مخفية');
+      } else {
+        const saved = value.dataset.pzPrivateValue;
+        if (saved && value.textContent !== saved) value.textContent = saved;
+        value.removeAttribute('aria-label');
+      }
     });
 
     document.querySelectorAll('.pz-privacy-toggle').forEach((button) => {
@@ -61,21 +88,25 @@
       button.innerHTML = privacyIcon(hidden);
       button.setAttribute('aria-label', hidden ? 'إظهار الإيرادات وساعات اللعب' : 'إخفاء الإيرادات وساعات اللعب');
       button.setAttribute('title', hidden ? 'إظهار التفاصيل' : 'إخفاء التفاصيل');
+      button.setAttribute('aria-pressed', hidden ? 'true' : 'false');
     });
   }
 
   function ensurePrivacyToggle() {
     document.querySelectorAll('.stats').forEach((stats) => {
-      const labels = [...stats.querySelectorAll('.stat span')].map((span) => span.textContent.trim());
-      if (!labels.includes('إجمالي الإيرادات اليوم') && !labels.includes('ساعات اللعب اليوم')) return;
+      const hasPrivateStats = [...stats.querySelectorAll('.stat')].some((stat) => privateLabels.has(getPrivateStatLabel(stat)));
+      if (!hasPrivateStats) return;
 
       let button = stats.querySelector(':scope > .pz-privacy-toggle');
       if (!button) {
         button = document.createElement('button');
         button.type = 'button';
         button.className = 'pz-privacy-toggle';
-        button.addEventListener('click', () => {
-          const next = localStorage.getItem(privacyKey) !== '1';
+        button.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const hidden = localStorage.getItem(privacyKey) === '1';
+          const next = !hidden;
           localStorage.setItem(privacyKey, next ? '1' : '0');
           applyPrivacy(next);
         });
@@ -85,61 +116,98 @@
     applyPrivacy(localStorage.getItem(privacyKey) === '1');
   }
 
-  function closeVoltraConsole() {
-    document.getElementById('pz-voltra-console')?.remove();
-  }
+  function ensureVoltraInternalNavigation() {
+    const anchor = document.querySelector('a.button.ghost[href="http://127.0.0.1:8086/voltra"], a.button.ghost[href="#voltra-console"]');
+    if (!anchor || anchor.dataset.pzInternalVoltra === '1') return;
 
-  function toggleVoltraConsole(anchor) {
-    const existing = document.getElementById('pz-voltra-console');
-    if (existing) {
-      existing.remove();
-      return;
-    }
-
-    const host = anchor.closest('.content-section') || anchor.closest('section') || anchor.parentElement;
-    if (!host) return;
-
-    const panel = document.createElement('section');
-    panel.id = 'pz-voltra-console';
-    panel.className = 'content-section pz-voltra-console';
-    panel.innerHTML = `
-      <div class="pz-voltra-console-head">
-        <div>
-          <h2>لوحة Voltra داخل PlayZone</h2>
-          <p>إدارة المشتركات والربط والطاقة بدون فتح متصفح أو نافذة خارجية.</p>
-        </div>
-        <button type="button" class="button ghost pz-voltra-console-close">إغلاق اللوحة</button>
-      </div>
-      <iframe
-        class="pz-voltra-console-frame"
-        src="/voltra-console"
-        title="Voltra Power Manager"
-        loading="eager"
-      ></iframe>
-    `;
-    panel.querySelector('.pz-voltra-console-close')?.addEventListener('click', closeVoltraConsole);
-    document.body.appendChild(panel);
-  }
-
-  function ensureVoltraEmbed() {
-    const anchor = document.querySelector('a.button.ghost[href="http://127.0.0.1:8086/voltra"]');
-    if (!anchor) {
-      if (!document.querySelector('.sidebar .nav-item.selected')?.textContent.includes('Voltra')) {
-        closeVoltraConsole();
-      }
-      return;
-    }
-    if (anchor.dataset.pzEmbedded === '1') return;
-
-    anchor.dataset.pzEmbedded = '1';
+    anchor.dataset.pzInternalVoltra = '1';
     anchor.removeAttribute('target');
     anchor.removeAttribute('rel');
-    anchor.setAttribute('href', '#voltra-console');
+    anchor.setAttribute('href', '/voltra-console');
     anchor.textContent = 'لوحة Voltra';
     anchor.addEventListener('click', (event) => {
       event.preventDefault();
-      toggleVoltraConsole(anchor);
+      window.location.assign('/voltra-console');
     });
+  }
+
+  function ensureLeftScrollbar() {
+    let track = document.getElementById('pz-left-scroll-track');
+    if (track) return;
+
+    track = document.createElement('div');
+    track.id = 'pz-left-scroll-track';
+    track.setAttribute('aria-hidden', 'true');
+    track.innerHTML = '<div id="pz-left-scroll-thumb"></div>';
+    document.body.appendChild(track);
+
+    const thumb = track.firstElementChild;
+
+    thumb.addEventListener('pointerdown', (event) => {
+      const scroller = document.scrollingElement || document.documentElement;
+      scrollDrag = {
+        pointerId: event.pointerId,
+        startY: event.clientY,
+        startScrollTop: scroller.scrollTop,
+      };
+      thumb.setPointerCapture?.(event.pointerId);
+      document.body.classList.add('pz-scroll-dragging');
+      event.preventDefault();
+    });
+
+    thumb.addEventListener('pointermove', (event) => {
+      if (!scrollDrag || event.pointerId !== scrollDrag.pointerId) return;
+      const scroller = document.scrollingElement || document.documentElement;
+      const maxScroll = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      const trackHeight = Math.max(1, track.clientHeight);
+      const thumbHeight = Math.max(30, thumb.offsetHeight);
+      const travel = Math.max(1, trackHeight - thumbHeight);
+      const delta = event.clientY - scrollDrag.startY;
+      scroller.scrollTop = scrollDrag.startScrollTop + (delta / travel) * maxScroll;
+      event.preventDefault();
+    });
+
+    const stopDrag = (event) => {
+      if (!scrollDrag) return;
+      if (event?.pointerId != null && event.pointerId !== scrollDrag.pointerId) return;
+      scrollDrag = null;
+      document.body.classList.remove('pz-scroll-dragging');
+    };
+    thumb.addEventListener('pointerup', stopDrag);
+    thumb.addEventListener('pointercancel', stopDrag);
+
+    track.addEventListener('pointerdown', (event) => {
+      if (event.target === thumb) return;
+      const scroller = document.scrollingElement || document.documentElement;
+      const rect = track.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (event.clientY - rect.top) / Math.max(1, rect.height)));
+      const maxScroll = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      scroller.scrollTo({ top: ratio * maxScroll, behavior: 'smooth' });
+    });
+  }
+
+  function updateLeftScrollbar() {
+    const track = document.getElementById('pz-left-scroll-track');
+    const thumb = document.getElementById('pz-left-scroll-thumb');
+    if (!track || !thumb) return;
+
+    const scroller = document.scrollingElement || document.documentElement;
+    const viewport = scroller.clientHeight;
+    const total = scroller.scrollHeight;
+    const maxScroll = Math.max(0, total - viewport);
+
+    if (total <= viewport + 2) {
+      track.classList.add('is-hidden');
+      return;
+    }
+    track.classList.remove('is-hidden');
+
+    const trackHeight = Math.max(1, track.clientHeight);
+    const thumbHeight = Math.max(30, Math.round(trackHeight * viewport / total));
+    const travel = Math.max(0, trackHeight - thumbHeight);
+    const top = maxScroll > 0 ? Math.round(travel * scroller.scrollTop / maxScroll) : 0;
+    thumb.style.height = `${thumbHeight}px`;
+    thumb.style.transform = `translateY(${top}px)`;
   }
 
   function annotateTables() {
@@ -164,8 +232,10 @@
     if (!tabletQuery.matches) closeDrawer();
     ensureChrome();
     ensurePrivacyToggle();
-    ensureVoltraEmbed();
+    ensureVoltraInternalNavigation();
+    ensureLeftScrollbar();
     annotateTables();
+    updateLeftScrollbar();
   }
 
   function schedule() {
@@ -182,18 +252,16 @@
     if (event.target.closest('.sidebar .nav-item')) closeDrawer();
   });
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-      closeDrawer();
-      closeVoltraConsole();
-    }
+    if (event.key === 'Escape') closeDrawer();
   });
 
+  window.addEventListener('scroll', updateLeftScrollbar, { passive: true });
   tabletQuery.addEventListener?.('change', schedule);
   handsetQuery.addEventListener?.('change', schedule);
   window.addEventListener('orientationchange', schedule);
   window.addEventListener('resize', schedule, { passive: true });
 
-  new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
+  new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', schedule, { once: true });
   } else {
