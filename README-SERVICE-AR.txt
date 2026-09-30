@@ -1,10 +1,10 @@
-PlayZone Manager v0.31 - Remote Support Edition
+﻿PlayZone Manager v0.31 - Remote Support Edition
 ===============================================
 
 التشغيل المحلي
 --------------
 Windows Boot -> PlayZoneManager Service -> Local Web http://127.0.0.1:8000
-ويتم فتح الواجهة للمستخدم في Microsoft Edge App Mode.
+واجهة المستخدم تفتح داخل PlayZone Manager.exe بمتصفح Chromium مدمج (Electron)، بدون الاعتماد على Microsoft Edge.
 
 المكونات
 --------
@@ -47,3 +47,16 @@ C:\ProgramData\PlayZone Manager\logs\service.log
 - ProgramData لا يتم حذفها عند Upgrade/Reinstall.
 - ROOT لا يعمل بدون كلمة مرور في v0.31.
 - عند فقد ROOT Password يمكن لمسؤول Windows المحلي تشغيل Setup-Root-Password.bat.
+
+
+إلغاء التثبيت الكامل
+--------------------
+شغّل Uninstall-PlayZone-Service.ps1 كمسؤول. يمكن الاحتفاظ بقاعدة البيانات أو حذفها باستخدام -RemoveData.
+
+
+Desktop Edition v0.32
+---------------------
+- System Logs: ROOT only.
+- PlayZone Manager.exe يستخدم Chromium مدمجاً عبر Electron 44.4.5.
+- أول تثبيت يحتاج إنترنت لتنزيل runtime الرسمي إذا لم يتم وضع electron-v44.4.5-win32-x64.zip داخل desktop-runtime بجوار الـInstaller.
+- بعد التثبيت لا يعتمد البرنامج على Edge أو Chrome.
