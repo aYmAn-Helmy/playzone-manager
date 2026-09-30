@@ -1,6 +1,9 @@
-$ErrorActionPreference = 'SilentlyContinue'
-$Url = 'http://127.0.0.1:8000'
-$Health = "$Url/api/health"
+﻿$ErrorActionPreference = 'SilentlyContinue'
+$InstallRoot = Join-Path $env:ProgramFiles 'PlayZone Manager'
+$DesktopRuntime = Join-Path $InstallRoot 'desktop-runtime'
+$DesktopExe = Join-Path $DesktopRuntime 'abo_aYmAn.exe'
+$DesktopShell = Join-Path $InstallRoot 'desktop-shell'
+$Health = 'http://127.0.0.1:8000/api/health'
 
 $ready = $false
 for ($i = 0; $i -lt 120; $i++) {
@@ -11,28 +14,13 @@ for ($i = 0; $i -lt 120; $i++) {
     Start-Sleep -Milliseconds 500
 }
 
-if (-not $ready) {
+if (-not (Test-Path -LiteralPath $DesktopExe)) {
     Add-Type -AssemblyName PresentationFramework
     [System.Windows.MessageBox]::Show(
-        "PlayZone Manager service is not ready. Check C:\ProgramData\PlayZone Manager\logs\service.log",
-        'PlayZone Manager', 'OK', 'Error'
+        "abo_aYmAn Desktop runtime is missing. Re-run Install-PlayZone-Service.bat to repair it.",
+        'abo_aYmAn', 'OK', 'Error'
     ) | Out-Null
-    exit 1
+    exit 2
 }
 
-$edgeCandidates = @(
-    (Join-Path ${env:ProgramFiles(x86)} 'Microsoft\Edge\Application\msedge.exe'),
-    (Join-Path $env:ProgramFiles 'Microsoft\Edge\Application\msedge.exe')
-) | Where-Object { $_ -and (Test-Path $_) }
-
-$edge = $edgeCandidates | Select-Object -First 1
-if (-not $edge) {
-    $cmd = Get-Command msedge.exe -ErrorAction SilentlyContinue
-    if ($cmd) { $edge = $cmd.Source }
-}
-
-if ($edge) {
-    Start-Process -FilePath $edge -ArgumentList @('--app=' + $Url, '--start-maximized')
-} else {
-    Start-Process $Url
-}
+Start-Process -FilePath $DesktopExe -ArgumentList @('"' + $DesktopShell + '"') -WorkingDirectory $DesktopRuntime

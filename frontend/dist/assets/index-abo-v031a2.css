@@ -72,8 +72,7 @@
 
 /* v0.31 Remote Support */
 .tailscale-details{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}.tailscale-url{color:#72b7ff;text-decoration:none;overflow-wrap:anywhere;font:700 12px/1.5 Consolas,monospace}.tailscale-url:hover{text-decoration:underline}.tailscale-privacy{margin:12px 0 0;color:#91d8b5;font-size:12px}
-.abo-brand{justify-content:flex-start;padding:0 2px 18px}.abo-brand-logo{display:block;width:202px;max-width:100%;height:auto;border-radius:7px;object-fit:contain}.abo-login-brand{display:flex;justify-content:center;align-items:center;margin:0 auto 10px}.abo-login-logo{display:block;width:202px;max-width:82%;height:auto;border-radius:8px;object-fit:contain}.login-panel .abo-login-logo{margin:0 auto}
-.sidebar .brand{height:82px;min-height:82px;padding:0 0 18px;background:url('/abo-ayman-logo.png') no-repeat left top/202px 65px}
-.sidebar .brand>*{display:none!important}
-.login-panel:before{content:'';display:block;width:202px;height:65px;max-width:82%;margin:0 auto 12px;background:url('/abo-ayman-logo.png') no-repeat center/contain}
-.login-panel>.brand-mark,.login-panel>.login-ps-brand{display:none!important}
+
+
+/* abo_aYmAn v0.31a2 branding */
+.abo-brand{display:flex!important;align-items:center!important;justify-content:flex-start!important;min-height:70px;padding:0 4px 18px!important}.abo-brand-logo{display:block;width:202px;max-width:100%;height:auto;object-fit:contain;border-radius:6px}.abo-login-brand{display:flex;align-items:center;justify-content:center;margin:0 auto 12px}.abo-login-logo{display:block;width:202px;max-width:90%;height:auto;object-fit:contain;border-radius:7px}.login-panel .abo-login-brand{margin-bottom:10px}

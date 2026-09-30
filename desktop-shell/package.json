@@ -1,0 +1,7 @@
+{
+  "name": "abo-ayman-desktop",
+  "productName": "abo_aYmAn",
+  "version": "0.33.0",
+  "private": true,
+  "main": "main.js"
+}

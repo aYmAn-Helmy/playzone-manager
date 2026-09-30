@@ -1,0 +1,19 @@
+abo_aYmAn v0.33 - Universal Responsive UI - Test Report
+
+Static validation completed:
+- frontend/dist/index.html has a responsive viewport meta tag.
+- abo-addon.css overrides legacy desktop min-width at <=1100px.
+- Desktop (>1100px) keeps the existing hover auto-hide sidebar.
+- Tablet/mobile (<=1100px) use a touch drawer and backdrop.
+- Mobile (<=768px) uses one-column station cards and card-style tables.
+- Modal dialogs switch to touch-friendly bottom sheets on phones.
+- Drinks page forms/cards are responsive on phones.
+- System Logs tables inherit the same mobile card conversion.
+- JavaScript syntax validation passed with Node.js.
+- Python backend compile validation passed.
+- Cache-busting query updated to v033-responsive.
+
+Notes:
+The existing abo_aYmAn Mobile APK loads each customer's Tailscale URL, so once a
+customer is upgraded to v0.33 the APK receives the responsive layout automatically.
+No separate mobile backend or database is required.

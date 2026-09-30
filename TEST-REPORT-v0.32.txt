@@ -1,0 +1,23 @@
+abo_aYmAn v0.32 - Test Report
+=============================
+
+Passed in build environment:
+- Python compileall for backend.
+- Node.js syntax check for Electron desktop-shell/main.js.
+- Node.js syntax check for production frontend bundle.
+- Node.js syntax check for drinks addon.
+- FastAPI /api/health smoke test.
+- ROOT login -> /api/root/system-logs returns 200.
+- ADMIN login -> /api/root/system-logs returns 403 Root role required.
+- Existing /api/audit remains ADMIN/ROOT compatible for reports.
+- Drinks regression: open customer -> add product from Products -> item timestamp and price persisted -> day totals updated.
+- Frontend nav hides System Logs unless current role is ROOT.
+- Electron installer pins official Electron 44.4.5 Windows x64 and verifies SHA256 before extraction.
+
+Windows-only verification still required on a real Windows 10/11 x64 PC:
+- Download/extraction of Electron runtime by PowerShell installer.
+- Launch of renamed abo_aYmAn.exe Electron binary.
+- Desktop/Start Menu/Startup shortcuts.
+- Printing through the embedded Chromium window.
+
+The existing backend/Voltra/Tailscale service logic is preserved from v0.31d.

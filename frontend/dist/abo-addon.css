@@ -1,0 +1,190 @@
+/* abo_aYmAn v0.31d: auto-hide sidebar, integrated drinks, stable home cards */
+@media screen {
+  .app-shell{display:block!important;min-height:100vh!important}
+  .main-area{width:100%!important;min-width:0!important;padding-left:34px!important}
+  .sidebar.abo-auto-sidebar{position:fixed!important;left:0!important;right:auto!important;top:0!important;width:236px!important;height:100vh!important;z-index:1000!important;transform:translateX(calc(-100% + 18px));transition:transform .22s ease,box-shadow .22s ease;box-shadow:none!important}
+  .sidebar.abo-auto-sidebar:hover{transform:translateX(0);box-shadow:22px 0 45px #0009!important}
+  .sidebar.abo-auto-sidebar:after{content:'›';position:absolute;right:0;top:50%;transform:translateY(-50%);width:18px;height:72px;border-radius:0 9px 9px 0;background:#0d6bd8;color:#fff;display:grid;place-items:center;font-size:22px;box-shadow:4px 0 20px #087cff55}
+  .sidebar.abo-auto-sidebar:hover:after{opacity:.35}
+
+  .dashboard-workspace{display:flex!important;flex-direction:column!important;gap:14px!important;direction:rtl!important}
+  .dashboard-workspace>.dashboard-rail{order:-1!important;width:100%!important;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:14px!important;direction:rtl!important}
+  .dashboard-workspace>.stations-panel{width:100%!important;direction:rtl!important}
+  .dashboard-rail>.rail-card{height:178px!important;min-height:178px!important;max-height:178px!important;display:flex!important;flex-direction:column!important}
+  .dashboard-rail>.rail-card .rail-title{flex:0 0 auto!important}
+  .dashboard-rail>.rail-card .recent-list,.dashboard-rail>.rail-card .system-list{flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important;scrollbar-width:thin;max-height:132px!important}
+
+  #abo-drinks-mount{width:100%;min-width:0}
+  #abo-drinks-page{display:block!important;position:relative!important;inset:auto!important;z-index:auto!important;overflow:visible!important;color:inherit!important;font:inherit!important;background:transparent!important;padding:0!important;margin:0!important}
+  .abo-drinks-shell{max-width:none;margin:0;padding:0}
+  .abo-drinks-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin:0 0 16px}
+  .abo-drinks-head h2{margin:0 0 5px;font-size:20px}.abo-drinks-head p,.abo-drink-create p{margin:0;color:#819ab3;font-size:12px}
+  .abo-drink-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}.abo-drink-summary>div{background:linear-gradient(145deg,#0e2033,#0a1724);border:1px solid #203d58;border-radius:14px;padding:14px}.abo-drink-summary span{display:block;color:#829bb4;font-size:11px}.abo-drink-summary b{display:block;margin-top:7px;font-size:22px}
+  .abo-drink-create{display:flex;justify-content:space-between;align-items:center;gap:18px;background:#0b1b2a;border:1px solid #23435f;border-radius:14px;padding:15px 17px;margin-bottom:18px}.abo-drink-create h2{margin:0 0 5px;font-size:17px}.abo-drink-create form{display:flex;gap:9px;min-width:min(520px,100%)}
+  .abo-drink-create input,.abo-add-drink input,.abo-add-drink select,.abo-tab-checkout select{background:#07131f;border:1px solid #2a4965;color:#fff;border-radius:9px;padding:10px 12px;outline:none}.abo-drink-create input{flex:1}.abo-drink-create button,.abo-add-drink button,.abo-tab-checkout button,.abo-paid-row button,.abo-receipt-actions button{border:0;border-radius:9px;padding:10px 14px;background:#1478d4;color:#fff;font-weight:700;cursor:pointer}
+  .abo-drink-section-title{display:flex;align-items:center;justify-content:space-between;margin:18px 0 10px}.abo-drink-section-title h2{display:inline;margin:0;font-size:18px}.abo-drink-section-title span{color:#7993ad;font-size:11px;margin-inline-start:10px}
+  .abo-open-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.abo-tab-card{background:#0a1826;border:1px solid #24435e;border-radius:15px;padding:15px;box-shadow:0 12px 30px #0002}.abo-tab-card>header{display:flex;align-items:flex-start;justify-content:space-between;border-bottom:1px solid #18334a;padding-bottom:11px}.abo-tab-card h3{margin:0 0 3px;font-size:19px}.abo-tab-card header span{color:#718ca7;font-size:11px}.abo-tab-card header>strong{font-size:22px;color:#61e8a5}
+  .abo-tab-items{min-height:66px;margin:9px 0}.abo-tab-item{display:flex;justify-content:space-between;align-items:center;padding:9px 6px;border-bottom:1px solid #142b3f}.abo-tab-item>div{display:flex;gap:9px;align-items:center}.abo-item-main{flex-wrap:wrap}.abo-tab-item span{color:#7891a9;font-size:11px}.abo-item-time{direction:rtl;color:#59a8ec!important;background:#0b2238;border:1px solid #1d4568;border-radius:999px;padding:3px 7px;white-space:nowrap}.abo-tab-item button{border:0;width:24px;height:24px;border-radius:7px;background:#4d1d27;color:#ff8994;cursor:pointer}.abo-no-items,.abo-empty{text-align:center;color:#718ba4;padding:22px;border:1px dashed #2a4b66;border-radius:12px}
+  .abo-add-drink{display:grid;grid-template-columns:minmax(220px,1fr) 150px 72px auto;gap:8px;margin-top:12px;align-items:stretch}.abo-selected-price{display:flex;align-items:center;justify-content:center;gap:5px;background:#091725;border:1px solid #24445f;border-radius:9px;color:#7893ad;font-size:11px;padding:8px}.abo-selected-price b{color:#5ce6a1;font-size:13px}.abo-add-drink button:disabled,.abo-add-drink select:disabled{opacity:.45;cursor:not-allowed}
+  .abo-tab-checkout{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}.abo-tab-checkout button{background:#168851}.abo-tab-checkout button:disabled{opacity:.35;cursor:not-allowed}
+  .abo-paid-tabs{background:#091725;border:1px solid #203e5b;border-radius:14px;overflow:hidden}.abo-paid-row{display:grid;grid-template-columns:1fr 2fr 160px 90px;gap:12px;align-items:center;padding:12px 14px;border-bottom:1px solid #183249}.abo-paid-row:last-child{border-bottom:0}.abo-paid-row>div{display:flex;flex-direction:column;gap:3px}.abo-paid-row span,.abo-paid-items{color:#7790a8;font-size:11px}.abo-paid-items small{color:#59a8ec;margin-inline-start:4px}.abo-paid-row button{background:#173b59;border:1px solid #2b5c83;padding:8px}
+  .abo-product-warning{display:none;margin:0 0 16px;padding:12px 14px;border:1px solid #775820;background:#2c220d;color:#ffd26b;border-radius:11px;font-size:12px}.abo-product-warning.show{display:block}
+  .abo-drink-toast{position:fixed;left:28px;bottom:24px;z-index:1400;background:#10283d;border:1px solid #3473a5;border-radius:11px;padding:12px 16px;opacity:0;transform:translateY(15px);pointer-events:none;transition:.2s}.abo-drink-toast.show{opacity:1;transform:none}.abo-drink-toast.bad{border-color:#984250;background:#321820}
+  .abo-receipt-modal{display:none;position:fixed;inset:0;background:#000b;z-index:1500;align-items:center;justify-content:center;padding:20px}.abo-receipt-modal.show{display:flex}.abo-receipt-box{width:min(460px,100%);background:#0d1c2b;border:1px solid #31506b;border-radius:17px;padding:20px}.abo-print-receipt h2,.abo-print-receipt p{text-align:center;margin:3px}.abo-print-receipt hr{border:0;border-top:1px dashed #52677a;margin:13px 0}.rline{display:flex;justify-content:space-between;gap:20px;padding:5px 0}.rline.total{font-size:19px;color:#63e6a4}.abo-receipt-time{display:block;color:#55748d;font-size:9px;margin-top:2px}.abo-receipt-actions{display:flex;gap:8px;margin-top:15px}.abo-receipt-actions button:last-child{background:#293c4e}
+  @media(max-width:900px){.dashboard-workspace>.dashboard-rail{grid-template-columns:1fr!important}.abo-drink-summary{grid-template-columns:repeat(2,1fr)}.abo-open-tabs{grid-template-columns:1fr}.abo-drink-create{align-items:stretch;flex-direction:column}.abo-drink-create form{min-width:0}.abo-paid-row{grid-template-columns:1fr 1.5fr 110px 75px}.abo-add-drink{grid-template-columns:1fr 120px 62px auto}}
+}
+@media print{body *{visibility:hidden!important}#abo-receipt-modal,#abo-receipt-modal *,#abo-print-receipt,#abo-print-receipt *{visibility:visible!important}#abo-receipt-modal{display:block!important;position:absolute!important;inset:0!important;background:#fff!important;color:#000!important;padding:0!important}.abo-receipt-box{border:0!important;background:#fff!important;color:#000!important;width:74mm!important;margin:0 auto!important;padding:3mm!important}.abo-receipt-actions{display:none!important}.abo-print-receipt{font-family:Arial,Tahoma,sans-serif!important}.abo-print-receipt hr{border-color:#555!important}}
+
+/* ========================================================================
+   abo_aYmAn v0.33 — Universal Responsive UI
+   Desktop keeps hover auto-hide. Tablet/mobile use a touch drawer.
+   ======================================================================== */
+.abo-mobile-menu,#abo-mobile-sidebar-backdrop{display:none}
+
+@media screen and (max-width:1100px){
+  html,body{width:100%!important;min-width:0!important;max-width:100%!important;overflow-x:hidden!important}
+  body{-webkit-text-size-adjust:100%;text-size-adjust:100%;touch-action:manipulation}
+  .app-shell{display:block!important;grid-template-columns:none!important;min-height:100dvh!important;width:100%!important}
+  .main-area{grid-column:auto!important;width:100%!important;min-width:0!important;padding:14px 14px calc(28px + env(safe-area-inset-bottom))!important}
+
+  /* Touch navigation drawer */
+  .sidebar.abo-auto-sidebar{position:fixed!important;top:0!important;right:0!important;left:auto!important;width:min(86vw,300px)!important;height:100dvh!important;padding-top:calc(18px + env(safe-area-inset-top))!important;padding-bottom:calc(18px + env(safe-area-inset-bottom))!important;transform:translateX(105%)!important;transition:transform .22s ease,box-shadow .22s ease!important;box-shadow:none!important;z-index:1300!important;overflow-y:auto!important;overscroll-behavior:contain}
+  .sidebar.abo-auto-sidebar:hover{transform:translateX(105%)!important;box-shadow:none!important}
+  .sidebar.abo-auto-sidebar:after{display:none!important}
+  body.abo-sidebar-open .sidebar.abo-auto-sidebar,body.abo-sidebar-open .sidebar.abo-auto-sidebar:hover{transform:translateX(0)!important;box-shadow:-24px 0 55px #000b!important}
+  body.abo-sidebar-open{overflow:hidden!important}
+  #abo-mobile-sidebar-backdrop{position:fixed;inset:0;background:#020813b8;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);z-index:1250}
+  body.abo-sidebar-open #abo-mobile-sidebar-backdrop{display:block}
+  .abo-mobile-menu{display:grid!important;place-items:center;position:fixed!important;top:calc(10px + env(safe-area-inset-top))!important;right:10px!important;left:auto!important;width:42px!important;height:42px!important;min-width:42px!important;padding:0!important;font-size:22px;line-height:1;z-index:1220!important;box-shadow:0 8px 24px #0007!important}
+  .abo-mobile-menu span{transform:translateY(-1px)}
+
+  /* Header / quick actions */
+  .topbar{display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:10px 12px!important;min-height:0!important;margin-bottom:14px!important;padding-inline-start:52px!important}
+  .topbar>.page-heading{min-width:0!important;flex:1 1 260px!important}
+  .topbar>.top-actions{width:100%!important;min-width:0!important;display:flex!important;flex-wrap:wrap!important;align-items:stretch!important;gap:8px!important}
+  .topbar h1{font-size:24px!important;line-height:1.2!important;overflow-wrap:anywhere}
+  .page-heading p{line-height:1.45}
+  .clock-card,.shift-chip{min-width:0!important;flex:1 1 190px!important}
+  .icon-button{min-width:40px!important;flex:0 0 40px}
+
+  /* Global grids */
+  .stats,.mini-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .dashboard-workspace{display:flex!important;flex-direction:column!important;gap:12px!important}
+  .dashboard-workspace>.dashboard-rail{order:-1!important;width:100%!important;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}
+  .dashboard-workspace>.stations-panel{width:100%!important}
+  .station-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .settings-grid,.activation-settings-grid,.ui-control-grid,.expiry-mode-grid,.root-choice-grid{grid-template-columns:1fr!important}
+  .password-inline{grid-template-columns:1fr 1fr!important}
+  .content-section{min-width:0!important}
+  .inline-form,.report-filter{gap:9px!important}
+  .inline-form label,.report-filter label{min-width:min(190px,100%)!important;flex:1 1 190px!important}
+
+  /* Better touch targets */
+  .button,.nav-item,.icon-button{min-height:42px}
+  .nav-item{padding:12px 14px!important}
+  input,select{min-height:44px!important;font-size:16px!important}
+  .station-actions .button{min-height:42px!important;font-size:11px!important}
+
+  /* Preserve home card height while still allowing scrolling */
+  .dashboard-rail>.rail-card{height:176px!important;min-height:176px!important;max-height:176px!important}
+  .dashboard-rail>.rail-card .recent-list,.dashboard-rail>.rail-card .system-list{max-height:130px!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch}
+
+  /* Drinks page follows the normal content column */
+  #abo-drinks-mount,#abo-drinks-page,.abo-drinks-shell{width:100%!important;max-width:100%!important;min-width:0!important}
+  .abo-drink-create form{min-width:0!important}
+  .abo-open-tabs{grid-template-columns:1fr!important}
+}
+
+@media screen and (max-width:768px){
+  .main-area{padding:10px 10px calc(24px + env(safe-area-inset-bottom))!important}
+  .topbar{gap:8px 10px!important;margin-bottom:11px!important}
+  .topbar h1{font-size:21px!important}
+  .eyebrow{font-size:9px!important}
+  .page-heading p{font-size:10px!important;margin-top:3px!important}
+  .topbar>.top-actions{overflow-x:auto!important;flex-wrap:nowrap!important;padding-bottom:2px!important;scrollbar-width:none}
+  .topbar>.top-actions::-webkit-scrollbar{display:none}
+  .clock-card,.shift-chip{flex:0 0 auto!important;min-width:175px!important}
+
+  .stats,.mini-stats{gap:8px!important;margin-bottom:10px!important}
+  .stat{min-height:76px!important;padding:11px 10px!important;gap:9px!important}
+  .stat-icon{width:38px!important;height:38px!important}
+  .stat strong{font-size:16px!important}
+  .mini-stat{padding:9px!important}
+
+  .dashboard-workspace>.dashboard-rail{grid-template-columns:1fr!important}
+  .station-grid{grid-template-columns:1fr!important;gap:10px!important}
+  .station-card{padding:13px!important;border-radius:13px!important}
+  .station-title h3{font-size:18px!important}
+  .station-actions{gap:7px!important}
+  .station-actions .button{flex:1 1 calc(50% - 7px)!important;min-width:125px!important;min-height:46px!important;font-size:12px!important}
+  .section-title{align-items:flex-start!important;gap:8px!important}
+  .section-title h2,.content-section h2{font-size:16px!important}
+  .section-title>span{white-space:nowrap}
+
+  .content-section{margin:10px 0 16px!important;padding:13px!important;border-radius:12px!important}
+  .settings-grid{gap:12px!important;margin-top:10px!important}
+  .settings-grid input{width:100%!important}
+  .password-inline{grid-template-columns:1fr!important}
+  .inline-form,.report-filter{display:grid!important;grid-template-columns:1fr!important;align-items:stretch!important;padding:11px!important}
+  .inline-form label,.report-filter label,.report-filter>div{width:100%!important;min-width:0!important;margin:0!important}
+  .inline-form .button,.report-filter .button{width:100%!important}
+
+  /* Data tables become readable cards instead of desktop-width tables. */
+  .table-scroll{border:0!important;border-radius:0!important;overflow:visible!important;margin-top:10px!important}
+  table.abo-responsive-table{display:block!important;width:100%!important;min-width:0!important;white-space:normal!important;background:transparent!important}
+  table.abo-responsive-table thead{display:none!important}
+  table.abo-responsive-table tbody{display:block!important;width:100%!important}
+  table.abo-responsive-table tr{display:block!important;width:100%!important;margin:0 0 10px!important;padding:6px 10px!important;background:#091827!important;border:1px solid #1b3a56!important;border-radius:11px!important;box-shadow:0 7px 18px #0002!important}
+  table.abo-responsive-table td{display:grid!important;grid-template-columns:minmax(90px,38%) minmax(0,1fr)!important;align-items:center!important;gap:10px!important;width:100%!important;min-height:38px!important;padding:8px 2px!important;border-bottom:1px solid #153047!important;white-space:normal!important;overflow-wrap:anywhere!important;text-align:start!important}
+  table.abo-responsive-table td:last-child{border-bottom:0!important}
+  table.abo-responsive-table td:before{content:attr(data-label);color:#748da6;font-size:10px;font-weight:700;line-height:1.35}
+  table.abo-responsive-table .table-actions{justify-content:flex-start!important;flex-wrap:wrap!important;gap:7px!important}
+  table.abo-responsive-table .button{min-height:38px!important}
+
+  /* Modals become touch-friendly bottom sheets. */
+  .modal-backdrop{place-items:end center!important;padding:0!important;padding-top:env(safe-area-inset-top)!important}
+  .modal{width:100%!important;max-width:none!important;max-height:92dvh!important;border-radius:18px 18px 0 0!important;border-bottom:0!important}
+  .modal>header{padding:14px 14px!important;position:sticky!important;top:0!important;background:#0d1c2e!important;z-index:2}
+  .modal-body{padding:13px 14px calc(14px + env(safe-area-inset-bottom))!important}
+  .modal-actions{position:sticky!important;bottom:0!important;background:#0d1c2ef2!important;padding-top:9px!important;padding-bottom:env(safe-area-inset-bottom)!important;flex-wrap:wrap!important}
+  .modal-actions .button{flex:1 1 130px!important;min-height:46px!important}
+
+  /* Drinks */
+  .abo-drinks-head{flex-direction:column!important;align-items:stretch!important;gap:9px!important}
+  .abo-drinks-head>button{width:100%!important;min-height:44px!important}
+  .abo-drink-summary{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important;margin-bottom:11px!important}
+  .abo-drink-summary>div{padding:11px!important;border-radius:11px!important}
+  .abo-drink-summary b{font-size:17px!important}
+  .abo-drink-create{padding:12px!important;margin-bottom:13px!important}
+  .abo-drink-create form{display:grid!important;grid-template-columns:1fr!important;width:100%!important;gap:8px!important}
+  .abo-drink-create button{min-height:45px!important}
+  .abo-tab-card{padding:12px!important}
+  .abo-tab-card>header{gap:8px!important}
+  .abo-tab-card h3{font-size:17px!important}
+  .abo-tab-card header>strong{font-size:18px!important;white-space:nowrap}
+  .abo-tab-item{align-items:flex-start!important;gap:9px!important}
+  .abo-tab-item>div:first-child{min-width:0!important;flex:1!important}
+  .abo-add-drink{display:grid!important;grid-template-columns:1fr!important;gap:8px!important}
+  .abo-selected-price{min-height:42px!important}
+  .abo-add-drink button{min-height:45px!important}
+  .abo-tab-checkout{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important}
+  .abo-tab-checkout button{min-height:45px!important}
+  .abo-paid-tabs{background:transparent!important;border:0!important;display:grid!important;gap:9px!important}
+  .abo-paid-row{display:grid!important;grid-template-columns:1fr auto!important;gap:8px 10px!important;padding:12px!important;background:#091725!important;border:1px solid #203e5b!important;border-radius:11px!important}
+  .abo-paid-row>.abo-paid-items{grid-column:1/-1!important;white-space:normal!important;line-height:1.7!important}
+  .abo-paid-row>button{grid-column:1/-1!important;min-height:42px!important}
+  .abo-receipt-modal{align-items:flex-end!important;padding:0!important}
+  .abo-receipt-box{width:100%!important;max-height:92dvh!important;overflow:auto!important;border-radius:18px 18px 0 0!important;padding:16px!important}
+  .abo-receipt-actions button{flex:1!important;min-height:46px!important}
+
+  .abo-drink-toast{left:10px!important;right:10px!important;bottom:calc(10px + env(safe-area-inset-bottom))!important;text-align:center!important}
+}
+
+@media screen and (max-width:390px){
+  .stats{grid-template-columns:1fr!important}
+  .mini-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .station-actions .button{flex-basis:100%!important;min-width:0!important}
+  .clock-card,.shift-chip{min-width:165px!important}
+  .abo-drink-summary{grid-template-columns:1fr 1fr!important}
+  .abo-tab-checkout{grid-template-columns:1fr!important}
+}

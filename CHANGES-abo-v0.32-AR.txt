@@ -1,0 +1,12 @@
+abo_aYmAn v0.32 - Desktop Edition
+=================================
+
+- System Logs أصبحت ROOT فقط في الواجهة، وتمت إضافة API منفصل ROOT-only لها.
+- إضافة Desktop Application مبني على Electron/Chromium بدل Microsoft Edge.
+- التطبيق يتصل فقط بالخدمة المحلية http://127.0.0.1:8000.
+- تعطيل DevTools وفتح النوافذ/الروابط الخارجية داخل تطبيق الكاشير.
+- تنظيف Browser Cache عند بدء التطبيق مع الاحتفاظ بتسجيل الدخول المحلي.
+- Shortcut وStartup يشغلان abo_aYmAn.exe مباشرة.
+- Installer ينزل Electron 44.4.5 الرسمي مرة واحدة إذا لم يكن runtime ZIP مرفقاً، ويتحقق من SHA256 قبل التثبيت.
+- Uninstaller يوقف ويمسح Desktop runtime مع بقية مكونات البرنامج.
+- كل ميزات المشاريب وVoltra وTailscale من v0.31d محفوظة.
