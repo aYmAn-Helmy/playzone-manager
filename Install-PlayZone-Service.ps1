@@ -8,9 +8,9 @@ $ServiceName = 'PlayZoneManager'
 function Step([string]$Text) { Write-Host "`n==> $Text" -ForegroundColor Cyan }
 function Fail([string]$Text) { throw $Text }
 
-Write-Host 'PlayZone Manager v0.31 - Remote Support Edition' -ForegroundColor Green
-Write-Host 'Local backend + private Tailscale Serve support. Cloud Sync is disabled.'
-Write-Host 'Installer is fully offline: Python and all dependencies are bundled.'
+Write-Host 'abo_aYmAn v0.31 - Cloudflare Quick Tunnel TEST Edition' -ForegroundColor Green
+Write-Host 'Local backend + Cloudflare Quick Tunnel test + Tailscale fallback.'
+Write-Host 'Core app runtime is offline; cloudflared is downloaded only for the remote test.'
 
 Step 'Stopping previous PlayZone service'
 $existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
@@ -38,9 +38,32 @@ Copy-Item -LiteralPath (Join-Path $SourceRoot 'Bootstrap-Portable.ps1') -Destina
 Copy-Item -LiteralPath (Join-Path $SourceRoot 'Launch-PlayZone.ps1') -Destination $InstallRoot -Force
 Copy-Item -LiteralPath (Join-Path $SourceRoot 'VERSION.txt') -Destination $InstallRoot -Force
 Copy-Item -LiteralPath (Join-Path $SourceRoot 'PlayStation.ico') -Destination $InstallRoot -Force
-foreach ($optionalFile in @('Setup-Tailscale-Support.ps1','Setup-Tailscale-Support.bat','Setup-Root-Password.ps1','Setup-Root-Password.bat','REMOTE-SUPPORT-SETUP-AR.txt','TAILSCALE-GRANTS-EXAMPLE.json')) {
+foreach ($optionalFile in @('Setup-Tailscale-Support.ps1','Setup-Tailscale-Support.bat','Setup-Root-Password.ps1','Setup-Root-Password.bat','REMOTE-SUPPORT-SETUP-AR.txt','TAILSCALE-GRANTS-EXAMPLE.json','Start-Cloudflare-QuickTunnel-Test.ps1','CLOUDFLARE-QUICK-TUNNEL-TEST-AR.txt')) {
     $src = Join-Path $SourceRoot $optionalFile
     if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination $InstallRoot -Force }
+}
+
+Step 'Preparing Cloudflare Quick Tunnel test connector'
+$Cloudflared = Join-Path $InstallRoot 'cloudflared.exe'
+$BundledCloudflared = Join-Path $SourceRoot 'cloudflared.exe'
+if (Test-Path -LiteralPath $BundledCloudflared) {
+    Copy-Item -LiteralPath $BundledCloudflared -Destination $Cloudflared -Force
+} else {
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $CloudflaredUrl = 'https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe'
+        Invoke-WebRequest -UseBasicParsing -Uri $CloudflaredUrl -OutFile $Cloudflared
+    } catch {
+        Write-Warning "cloudflared download failed. Core app installation will continue: $($_.Exception.Message)"
+        Remove-Item -Force $Cloudflared -ErrorAction SilentlyContinue
+    }
+}
+if (Test-Path -LiteralPath $Cloudflared) {
+    & $Cloudflared --version
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning 'cloudflared verification failed; removing the test connector.'
+        Remove-Item -Force $Cloudflared -ErrorAction SilentlyContinue
+    }
 }
 
 Step 'Preparing self-contained local Python runtime'
@@ -147,7 +170,7 @@ if ($TailscaleService) {
 
 Step 'Configuring Voltra firewall'
 & netsh.exe advfirewall firewall delete rule name='PlayZone Manager Voltra TCP' | Out-Null
-& netsh.exe advfirewall firewall add rule name='PlayZone Manager Voltra TCP' dir=in action=allow protocol=TCP localport=10086 profile=private | Out-Null
+& netsh.exe advfirewall firewall add rule name='PlayZone Manager Voltra TCP' dir=in action=allow protocol=TCP localport=10086 profile=any remoteip=localsubnet | Out-Null
 
 Step 'Creating shortcuts and login launcher'
 $Launcher = Join-Path $InstallRoot 'Launch-PlayZone.ps1'
@@ -213,7 +236,8 @@ Write-Host 'Voltra TCP  : 10086'
 Write-Host "Data        : $DataRoot"
 Write-Host "Service log : $DataRoot\logs\service.log"
 Write-Host 'Cloud Sync  : DISABLED'
-Write-Host 'Internet    : Only required for Tailscale remote support'
-Write-Host 'Remote setup: Run Setup-Tailscale-Support.bat as Administrator after Tailscale is installed'
+Write-Host 'Internet    : Required for Cloudflare/Tailscale remote access only'
+Write-Host 'Remote test : ROOT > Remote Access > Start Test Remote Access'
+Write-Host 'Fallback    : Tailscale remains available for technical support'
 Write-Host ''
 Read-Host 'Press Enter to close'
