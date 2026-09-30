@@ -95,7 +95,7 @@ public class CustomerWebActivity extends Activity {
         settings.setBuiltInZoomControls(false);
         settings.setJavaScriptCanOpenWindowsAutomatically(false);
         settings.setSupportMultipleWindows(false);
-        settings.setUserAgentString(settings.getUserAgentString() + " abo_aYmAn-Mobile/0.1");
+        settings.setUserAgentString(settings.getUserAgentString() + " abo_aYmAn-Mobile/0.2");
 
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -119,7 +119,7 @@ public class CustomerWebActivity extends Activity {
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) {
-                    Toast.makeText(CustomerWebActivity.this, "تعذر الوصول للعميل. تأكد أن Tailscale متصل.", Toast.LENGTH_LONG).show();
+                    Toast.makeText(CustomerWebActivity.this, "تعذر الوصول للعميل. تأكد أن Remote Access شغال والرابط صحيح.", Toast.LENGTH_LONG).show();
                 }
             }
 
