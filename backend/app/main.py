@@ -126,7 +126,7 @@ UI_CONFIG_DEFAULTS: dict[str, bool] = {
     "show_nav_voltra": True,
 }
 
-app = FastAPI(title="PlayZone Manager API", version="0.31.0")
+app = FastAPI(title="PlayZone Manager API", version="0.33.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -1613,6 +1613,17 @@ def audit_log(user: User = Depends(admin_user), db: Session = Depends(get_db)):
              "action": row.action, "entity": row.entity, "entity_id": row.entity_id, "details": row.details}
             for row in rows]
 
+
+
+@app.get("/api/root/system-logs")
+def root_system_logs(user: User = Depends(root_ready_user), db: Session = Depends(get_db)):
+    """ROOT-only operational/audit log view used by the System Logs page."""
+    rows = db.scalars(
+        select(AuditLog).order_by(AuditLog.id.desc()).limit(500).options(joinedload(AuditLog.user))
+    )
+    return [{"id": row.id, "created_at": normalize_utc(row.created_at), "username": row.user.username,
+             "action": row.action, "entity": row.entity, "entity_id": row.entity_id, "details": row.details}
+            for row in rows]
 
 # ---- Backups -------------------------------------------------------------
 
