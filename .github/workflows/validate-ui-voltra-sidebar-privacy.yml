@@ -1,0 +1,59 @@
+name: Validate UI Privacy Voltra Sidebar
+
+on:
+  push:
+    branches:
+      - feature/ui-voltra-sidebar-privacy
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python syntax
+        shell: pwsh
+        run: |
+          python -m py_compile backend/app/main.py backend/app/embedded_voltra.py backend/voltra_local/dashboard.py
+
+      - name: JavaScript syntax
+        shell: pwsh
+        run: |
+          node --check frontend/dist/playzone-responsive.js
+          node --check frontend/dist/assets/index-v031.js
+
+      - name: Validate embedded Voltra HTML bridge
+        shell: pwsh
+        run: |
+          Push-Location backend
+          python -c "from app.main import _embedded_voltra_console_html; h=_embedded_voltra_console_html(); assert 'playzone_token' in h; assert '/api/root/voltra-console' in h; assert 'Voltra API Token' not in h; print('embedded-voltra-ok')"
+          Pop-Location
+
+      - name: Validate UI markers
+        shell: pwsh
+        run: |
+          $js = Get-Content frontend/dist/playzone-responsive.js -Raw
+          $css = Get-Content frontend/dist/playzone-responsive.css -Raw
+          $backend = Get-Content backend/app/main.py -Raw
+
+          if ($js -notmatch 'playzone_dashboard_private_hidden') { throw 'Privacy toggle missing.' }
+          if ($js -notmatch 'إجمالي الإيرادات اليوم') { throw 'Revenue privacy target missing.' }
+          if ($js -notmatch 'ساعات اللعب اليوم') { throw 'Gameplay privacy target missing.' }
+          if ($js -notmatch 'src="/voltra-console"') { throw 'Embedded Voltra iframe missing.' }
+          if ($backend -notmatch '/api/root/voltra-console') { throw 'Voltra ROOT proxy missing.' }
+          if ($css -notmatch 'right:0!important;left:auto!important') { throw 'Right-side sidebar rule missing.' }
+          if ($css -notmatch 'html::-webkit-scrollbar') { throw 'Subtle scrollbar rule missing.' }
+          if ($css -notmatch 'direction:ltr!important') { throw 'Left-side scrollbar direction rule missing.' }
+
+      - name: Ensure excluded modules remain excluded
+        shell: pwsh
+        run: |
+          $text = (Get-Content frontend/dist/playzone-responsive.js -Raw) + (Get-Content backend/app/main.py -Raw)
+          if ($text -match 'abo_aYmAn|abo-ayman-logo') { throw 'Unexpected abo_aYmAn branding.' }
+          if (Test-Path backend/app/drinks.py) { throw 'Unexpected drinks module.' }
