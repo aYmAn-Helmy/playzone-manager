@@ -1,0 +1,66 @@
+name: Validate Cloudflare Quick Tunnel Test
+
+on:
+  push:
+    branches:
+      - experiment/cloudflare-quick-tunnel
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python syntax
+        shell: pwsh
+        run: |
+          python -m py_compile backend/app/cloudflare_support.py backend/app/main.py
+
+      - name: JavaScript syntax
+        shell: pwsh
+        run: |
+          node --check frontend/dist/assets/index-v031.js
+
+      - name: PowerShell syntax
+        shell: pwsh
+        run: |
+          $files = @(
+            'Install-PlayZone-Service.ps1',
+            'Uninstall-PlayZone-Service.ps1',
+            'Start-Cloudflare-QuickTunnel-Test.ps1'
+          )
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($file, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error "$file : $($_.Message)" }
+              exit 1
+            }
+          }
+
+      - name: Verify Cloudflare integration markers
+        shell: pwsh
+        run: |
+          python -c "from pathlib import Path; m=Path('backend/app/main.py').read_text(encoding='utf-8-sig'); j=Path('frontend/dist/assets/index-v031.js').read_text(encoding='utf-8'); assert '/api/root/cloudflare/start' in m; assert '/root/cloudflare/start' in j; assert 'trycloudflare.com' in j"
+
+      - name: Build test artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          Compress-Archive -Path Start-Cloudflare-QuickTunnel-Test.ps1,CLOUDFLARE-QUICK-TUNNEL-TEST-AR.txt -DestinationPath out/abo_aYmAn-Cloudflare-QuickTunnel-Test-Kit.zip -Force
+          git archive --format=zip --output=out/abo_aYmAn-v0.31-cf-test1-source.zip HEAD
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: abo_aYmAn-cloudflare-quick-tunnel-test
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
