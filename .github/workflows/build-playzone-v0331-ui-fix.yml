@@ -34,11 +34,14 @@ jobs:
           if ($all -match 'abo_aYmAn|abo-ayman-logo') { throw 'Unexpected abo_aYmAn branding detected.' }
           if ($backend -match '/api/drinks|ensure_drinks_schema|DrinkTab|DrinkItem') { throw 'Unexpected drinks backend detected.' }
           if ($frontend -match '/api/drinks|المشاريب|o===.drinks.') { throw 'Unexpected drinks UI detected.' }
-          if ($responsive -notmatch 'playzone_dashboard_private_hidden') { throw 'Dashboard privacy eye missing.' }`n          if ($responsive -notmatch "value.textContent = maskText") { throw 'Direct privacy masking missing.' }`n          if ($responsive -notmatch "window.location.assign\('/voltra-console'\)") { throw 'Direct internal Voltra navigation missing.' }
-          if ($responsive -notmatch 'window.location.assign('/voltra-console')') { throw 'Embedded Voltra frame missing.' }
-          if ($backend -notmatch '/api/root/voltra-console') { throw 'ROOT Voltra proxy missing.' }
-          if ($responsiveCss -notmatch 'right:0!important;left:auto!important') { throw 'Right sidebar rule missing.' }
-          if ($responsiveCss -notmatch '#pz-left-scroll-track') { throw 'Custom left scrollbar rule missing.' }`n          if ($responsiveCss -notmatch 'left:2px') { throw 'Left scrollbar position missing.' }`n          if ($responsiveCss -notmatch 'html::-webkit-scrollbar,body::-webkit-scrollbar') { throw 'Native scrollbar hide rule missing.' }
+          if (-not $responsive.Contains('playzone_dashboard_private_hidden')) { throw 'Dashboard privacy eye missing.' }
+          if (-not $responsive.Contains('value.textContent = maskText')) { throw 'Direct privacy masking missing.' }
+          if (-not $responsive.Contains("window.location.assign('/voltra-console')")) { throw 'Direct internal Voltra navigation missing.' }
+          if (-not $backend.Contains('/api/root/voltra-console')) { throw 'ROOT Voltra proxy missing.' }
+          if (-not $responsiveCss.Contains('right:0!important;left:auto!important')) { throw 'Right sidebar rule missing.' }
+          if (-not $responsiveCss.Contains('#pz-left-scroll-track')) { throw 'Custom left scrollbar rule missing.' }
+          if (-not $responsiveCss.Contains('left:2px')) { throw 'Left scrollbar position missing.' }
+          if (-not $responsiveCss.Contains('html::-webkit-scrollbar,body::-webkit-scrollbar')) { throw 'Native scrollbar hide rule missing.' }
 
           $files = @('Install-PlayZone-Service.ps1','Launch-PlayZone.ps1','Uninstall-PlayZone-Service.ps1')
           foreach ($file in $files) {
