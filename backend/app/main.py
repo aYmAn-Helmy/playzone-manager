@@ -776,6 +776,18 @@ def _embedded_voltra_console_html() -> str:
         "<title>Voltra Power Manager</title>",
         "<title>PlayZone Manager — Voltra</title>",
     )
+    html = html.replace(
+        "</style></head>",
+        ".pz-playzone-back{position:fixed;top:12px;left:12px;z-index:120;"
+        "display:inline-flex;align-items:center;gap:7px;padding:9px 13px;border-radius:10px;"
+        "border:1px solid #2b5778;background:#0b2236e8;color:#ddecfa;text-decoration:none;"
+        "font-weight:700;box-shadow:0 7px 24px #0006}.pz-playzone-back:hover{background:#123653;color:#fff}"
+        "</style></head>",
+    )
+    html = html.replace(
+        "<body><div class=\"shell\">",
+        "<body><a class=\"pz-playzone-back\" href=\"/\">← العودة إلى PlayZone</a><div class=\"shell\">",
+    )
     return html
 
 
