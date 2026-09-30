@@ -121,9 +121,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f .github/workflows/hydrate-v033-runtime.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase --autostash origin abo_aYmAn
+          rm -f .github/workflows/hydrate-v033-runtime.yml
           git add offline-runtime .github/workflows/hydrate-v033-runtime.yml
           git commit -m "Add complete verified v0.33 offline runtime"
           git push origin HEAD:abo_aYmAn
