@@ -5,6 +5,19 @@ $InstallRoot=Join-Path $env:ProgramFiles 'PlayZone Manager'
 $DataRoot=Join-Path $env:ProgramData 'PlayZone Manager'
 $Python=Join-Path $InstallRoot '.runtime\python\python.exe'
 $ServiceScript=Join-Path $InstallRoot 'backend\app\windows_service.py'
+$Cloudflared=Join-Path $InstallRoot 'cloudflared.exe'
+$CloudflareState=Join-Path $DataRoot 'cloudflare-quick\state.json'
+if(Test-Path -LiteralPath $CloudflareState){
+  try {
+    $state=Get-Content -LiteralPath $CloudflareState -Raw | ConvertFrom-Json
+    if($state.pid){ Stop-Process -Id ([int]$state.pid) -Force -ErrorAction SilentlyContinue }
+  } catch { }
+}
+try {
+  Get-CimInstance Win32_Process -Filter "Name='cloudflared.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.ExecutablePath -eq $Cloudflared } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+} catch { }
 if(Get-Service -Name 'PlayZoneManager' -ErrorAction SilentlyContinue){
   Stop-Service -Name 'PlayZoneManager' -Force -ErrorAction SilentlyContinue
   if((Test-Path $Python) -and (Test-Path $ServiceScript)){ & $Python $ServiceScript remove 2>$null | Out-Null }
