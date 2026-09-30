@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, text
 from sqlalchemy.orm import Session
 
 from .billing import amount_piasters, live_billable_seconds, normalize_utc, seconds_between, segment_billable_seconds, weighted_amount_piasters
@@ -195,11 +195,20 @@ def _shift_financials(db: Session, shift_id: int) -> dict[str, int]:
             func.coalesce(func.sum(case((CashMovement.movement_type == "CASH_OUT", CashMovement.amount_piasters), else_=0)), 0),
         ).where(CashMovement.shift_id == shift_id)
     ).one()
+    # abo_aYmAn drinks are independent customer tabs, but paid drink invoices
+    # still belong to the cashier shift that collected them so cash closeout stays exact.
+    drink_row = db.execute(text("""
+        SELECT COUNT(*),
+               COALESCE(SUM(CASE WHEN payment_method='CASH' THEN total_piasters ELSE 0 END),0),
+               COALESCE(SUM(CASE WHEN payment_method='VISA' THEN total_piasters ELSE 0 END),0),
+               COALESCE(SUM(CASE WHEN payment_method='INSTAPAY' THEN total_piasters ELSE 0 END),0)
+        FROM drink_tabs WHERE shift_id=:shift_id AND status='PAID'
+    """), {"shift_id": shift_id}).one()
     return {
-        "invoice_count": int(invoice_row[0] or 0),
-        "cash_sales": int(invoice_row[1] or 0),
-        "visa_sales": int(invoice_row[2] or 0),
-        "instapay_sales": int(invoice_row[3] or 0),
+        "invoice_count": int(invoice_row[0] or 0) + int(drink_row[0] or 0),
+        "cash_sales": int(invoice_row[1] or 0) + int(drink_row[1] or 0),
+        "visa_sales": int(invoice_row[2] or 0) + int(drink_row[2] or 0),
+        "instapay_sales": int(invoice_row[3] or 0) + int(drink_row[3] or 0),
         "cash_in": int(movement_row[0] or 0),
         "cash_out": int(movement_row[1] or 0),
     }

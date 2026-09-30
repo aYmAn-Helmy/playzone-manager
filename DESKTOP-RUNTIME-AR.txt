@@ -1,0 +1,31 @@
+abo_aYmAn v0.32 - Desktop Browser Runtime
+=========================================
+
+النسخة لا تعتمد على Microsoft Edge أو Google Chrome لعرض واجهة البرنامج.
+بعد التثبيت يتم تشغيل الواجهة داخل abo_aYmAn.exe باستخدام Electron/Chromium.
+
+أول تثبيت
+---------
+إذا لم يكن ملف Electron موجوداً داخل مجلد desktop-runtime بجوار الـInstaller،
+يقوم الـInstaller بتنزيل النسخة الرسمية التالية من GitHub:
+
+Electron 44.4.5 - Windows x64
+electron-v44.4.5-win32-x64.zip
+SHA256: 11c395820a5aaa8ebcc0686b476d0ac98a730274ebfbdc8cf5538a7c2815cb5d
+
+يتم التحقق من SHA256 قبل فك الملف. ويتم الاحتفاظ بنسخة Cache داخل ProgramData
+حتى لا يحتاج Upgrade لاحق إلى تنزيلها مرة أخرى.
+
+للتثبيت Offline بالكامل
+-----------------------
+ضع الملف التالي داخل:
+  desktop-runtime\electron-v44.4.5-win32-x64.zip
+ثم شغّل Install-PlayZone-Service.bat.
+
+بعد التثبيت
+-----------
+- Shortcut يشغّل abo_aYmAn.exe مباشرة.
+- لا يتم فتح Edge.
+- الـBackend يظل Windows Service على 127.0.0.1:8000.
+- Chromium المدمج لا يسمح بالتنقل خارج خدمة PlayZone المحلية.
+- DevTools معطلة داخل نسخة الكاشير.

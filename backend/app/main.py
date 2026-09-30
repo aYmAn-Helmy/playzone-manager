@@ -30,6 +30,18 @@ from .activation import (
 from .billing import normalize_utc
 from .db import BACKUP_DIR, Base, SessionLocal, engine, get_db, migrate_existing_database
 from .embedded_voltra import start_embedded_voltra, stop_embedded_voltra
+from .drinks import (
+    DrinkCheckoutRequest,
+    DrinkItemCreate,
+    DrinkTabCreate,
+    add_item as add_drink_item,
+    checkout_tab as checkout_drink_tab,
+    create_or_get_tab as create_or_get_drink_tab,
+    delete_item as delete_drink_item,
+    ensure_drinks_schema,
+    tab_snapshot as drink_tab_snapshot,
+    today_overview as drinks_today_overview,
+)
 from .models import AuditLog, AuthToken, CashMovement, Invoice, PlaySession, Product, Shift, Station, SystemSetting, User
 from .schemas import (
     AddItem,
@@ -126,7 +138,7 @@ UI_CONFIG_DEFAULTS: dict[str, bool] = {
     "show_nav_voltra": True,
 }
 
-app = FastAPI(title="PlayZone Manager API", version="0.31.0")
+app = FastAPI(title="abo_aYmAn API", version="0.33.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -139,6 +151,7 @@ app.add_middleware(
 def seed_data() -> None:
     Base.metadata.create_all(engine)
     migrate_existing_database()
+    ensure_drinks_schema(engine)
     with SessionLocal() as db:
         defaults = {
             "initial_grace_seconds": "300",
@@ -1367,6 +1380,60 @@ def invoice_detail(invoice_id: int, user: User = Depends(ready_user), db: Sessio
     }
 
 
+
+# ---- Drinks / customer running tabs (abo_aYmAn edition) -----------------
+
+@app.get("/api/drinks/today")
+def drinks_today(user: User = Depends(ready_user), db: Session = Depends(get_db)):
+    return drinks_today_overview(db)
+
+
+@app.get("/api/drinks/tabs/{tab_id}")
+def drinks_tab_detail(tab_id: int, user: User = Depends(ready_user), db: Session = Depends(get_db)):
+    return drink_tab_snapshot(db, tab_id)
+
+
+@app.post("/api/drinks/tabs")
+def drinks_open_tab(payload: DrinkTabCreate, user: User = Depends(ready_user), db: Session = Depends(get_db)):
+    require_cashier_shift(db, user)
+    tab, created = create_or_get_drink_tab(db, payload.customer_name, user.id)
+    audit(db, user, "DRINK_TAB_OPENED" if created else "DRINK_TAB_REUSED", "drink_tab", tab["id"], f"customer={tab['customer_name']}")
+    db.commit()
+    return {"created": created, "tab": tab}
+
+
+@app.post("/api/drinks/tabs/{tab_id}/items")
+def drinks_add_item(tab_id: int, payload: DrinkItemCreate, user: User = Depends(ready_user), db: Session = Depends(get_db)):
+    require_cashier_shift(db, user)
+    result = add_drink_item(db, tab_id, payload.product_id, payload.quantity, user.id)
+    item = next((x for x in result["tab"].get("items", []) if int(x.get("id", 0)) == int(result["item_id"])), None)
+    details = f"product_id={payload.product_id};qty={payload.quantity}"
+    if item:
+        details += f";name={item.get('drink_name')};price={item.get('unit_price_piasters')}"
+    audit(db, user, "DRINK_ITEM_ADDED", "drink_tab", tab_id, details)
+    db.commit()
+    return result
+
+
+@app.delete("/api/drinks/tabs/{tab_id}/items/{item_id}")
+def drinks_remove_item(tab_id: int, item_id: int, user: User = Depends(ready_user), db: Session = Depends(get_db)):
+    require_cashier_shift(db, user)
+    tab = delete_drink_item(db, tab_id, item_id)
+    audit(db, user, "DRINK_ITEM_REMOVED", "drink_tab", tab_id, f"item={item_id}")
+    db.commit()
+    return {"tab": tab}
+
+
+@app.post("/api/drinks/tabs/{tab_id}/checkout")
+def drinks_checkout(tab_id: int, payload: DrinkCheckoutRequest, user: User = Depends(ready_user), db: Session = Depends(get_db)):
+    shift = require_cashier_shift(db, user)
+    if payload.payment_method not in _payment_methods_config(db)["enabled"]:
+        raise HTTPException(409, "PAYMENT_METHOD_DISABLED")
+    tab = checkout_drink_tab(db, tab_id, payload.payment_method, user.id, shift.id if shift else None)
+    audit(db, user, "DRINK_TAB_PAID", "drink_tab", tab_id, f"invoice={tab['invoice_number']};total={tab['total_piasters']};payment={payload.payment_method}")
+    db.commit()
+    return {"tab": tab}
+
 # ---- Products ------------------------------------------------------------
 
 @app.get("/api/products", response_model=list[ProductOut])
@@ -1614,6 +1681,17 @@ def audit_log(user: User = Depends(admin_user), db: Session = Depends(get_db)):
             for row in rows]
 
 
+@app.get("/api/root/system-logs")
+def root_system_logs(user: User = Depends(root_ready_user), db: Session = Depends(get_db)):
+    """ROOT-only operational/audit log view used by the System Logs page."""
+    rows = db.scalars(
+        select(AuditLog).order_by(AuditLog.id.desc()).limit(500).options(joinedload(AuditLog.user))
+    )
+    return [{"id": row.id, "created_at": normalize_utc(row.created_at), "username": row.user.username,
+             "action": row.action, "entity": row.entity, "entity_id": row.entity_id, "details": row.details}
+            for row in rows]
+
+
 # ---- Backups -------------------------------------------------------------
 
 def _backup_database(db: Session, filename_prefix: str = "playzone") -> Path:
@@ -1684,6 +1762,7 @@ def restore_backup(filename: str, confirm: bool = Query(False), user: User = Dep
     finally:
         raw.close()
     migrate_existing_database()
+    ensure_drinks_schema(engine)
     return {"ok": True, "restored": filename, "safety_backup": safety.name, "restart_recommended": True}
 
 

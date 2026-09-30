@@ -1,0 +1,14 @@
+abo_aYmAn v0.31c - Test Report
+==============================
+
+PASS - Python compile for all backend .py files.
+PASS - app.main imports with a fresh SQLite database.
+PASS - Drinks schema creates and migrates product_id on drink_items.
+PASS - Product-linked drink flow: open customer -> add product -> price snapshot -> checkout.
+PASS - Product price is sourced by backend from products table, not browser input.
+PASS - Existing item keeps its historical price when product price changes; new item uses new price.
+PASS - JavaScript syntax check for abo-addon.js and main bundled frontend.
+PASS - Drinks frontend fetches /api/products and sends product_id + quantity only.
+PASS - Dashboard CSS places Recent Invoices + System Status above station cards with fixed 178px cards and internal scrolling.
+
+Windows-specific installer/service behavior still requires final smoke test on a Windows client machine.

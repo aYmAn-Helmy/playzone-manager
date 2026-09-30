@@ -1,3 +1,5 @@
 abo_aYmAn
-PlayZone Manager branded edition
-Base version: 0.31
+Desktop Edition
+Version: 0.33
+Embedded Chromium shell: Electron 44.4.5
+System Logs: ROOT only
