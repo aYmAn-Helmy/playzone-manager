@@ -117,14 +117,14 @@ public class MainActivity extends Activity {
     private void renderCustomers() {
         List<Customer> customers = loadCustomers();
         customersContainer.removeAllViews();
-        summaryText.setText(String.format(Locale.US, "%d عميل • روابط Tailscale HTTPS", customers.size()));
+        summaryText.setText(String.format(Locale.US, "%d عميل • روابط Remote HTTPS", customers.size()));
 
         if (customers.isEmpty()) {
             LinearLayout empty = card();
             TextView t1 = text("مفيش عملاء مضافين لسه", 20, true, Color.WHITE);
             t1.setGravity(Gravity.CENTER);
             empty.addView(t1, marginParams(-1, -2, 12, 18, 12, 8));
-            TextView t2 = text("اضغط «إضافة عميل» واكتب اسم العميل ورابط Tailscale Serve بتاعه.\nلازم Tailscale يكون متصل على الموبايل بنفس الـTailnet.", 15, false, Color.rgb(150, 178, 208));
+            TextView t2 = text("اضغط «إضافة عميل» واكتب اسم العميل ورابط Remote HTTPS.\nCloudflare Quick Tunnel يعمل مباشرة بدون Tailscale على الموبايل، وTailscale يظل متاح كـFallback.", 15, false, Color.rgb(150, 178, 208));
             t2.setGravity(Gravity.CENTER);
             empty.addView(t2, marginParams(-1, -2, 12, 0, 12, 18));
             customersContainer.addView(empty, marginParams(-1, -2, 0, 4, 0, 12));
@@ -234,7 +234,7 @@ public class MainActivity extends Activity {
         form.addView(name, new LinearLayout.LayoutParams(-1, dp(56)));
 
         EditText url = new EditText(this);
-        url.setHint("https://client-name.tailnet.ts.net");
+        url.setHint("https://xxxx.trycloudflare.com أو https://device.ts.net");
         url.setSingleLine(true);
         url.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
         url.setTextDirection(View.TEXT_DIRECTION_LTR);
@@ -255,7 +255,7 @@ public class MainActivity extends Activity {
             String customerName = name.getText().toString().trim();
             String customerUrl;
             try {
-                customerUrl = normalizeTailscaleUrl(url.getText().toString());
+                customerUrl = normalizeRemoteUrl(url.getText().toString());
             } catch (IllegalArgumentException ex) {
                 url.setError(ex.getMessage());
                 return;
@@ -297,17 +297,19 @@ public class MainActivity extends Activity {
                 .show();
     }
 
-    private String normalizeTailscaleUrl(String raw) {
+    private String normalizeRemoteUrl(String raw) {
         String value = raw == null ? "" : raw.trim();
-        if (value.isEmpty()) throw new IllegalArgumentException("اكتب رابط Tailscale");
+        if (value.isEmpty()) throw new IllegalArgumentException("اكتب رابط Remote Access");
         if (!value.contains("://")) value = "https://" + value;
         Uri uri = Uri.parse(value);
         if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null) {
             throw new IllegalArgumentException("الرابط لازم يكون HTTPS صحيح");
         }
         String host = uri.getHost().toLowerCase(Locale.US);
-        if (!(host.endsWith(".ts.net") || host.endsWith(".tailscale.net"))) {
-            throw new IllegalArgumentException("استخدم رابط Tailscale HTTPS للعميل");
+        boolean tailscaleHost = host.endsWith(".ts.net") || host.endsWith(".tailscale.net");
+        boolean tryCloudflareHost = host.endsWith(".trycloudflare.com");
+        if (!(tailscaleHost || tryCloudflareHost)) {
+            throw new IllegalArgumentException("استخدم رابط TryCloudflare أو Tailscale HTTPS للعميل");
         }
         String normalized = "https://" + host;
         if (uri.getPort() != -1 && uri.getPort() != 443) normalized += ":" + uri.getPort();
