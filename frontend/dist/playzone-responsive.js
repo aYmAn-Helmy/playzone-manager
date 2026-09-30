@@ -84,11 +84,15 @@
     });
 
     document.querySelectorAll('.pz-privacy-toggle').forEach((button) => {
+      const state = hidden ? 'hidden' : 'shown';
       button.classList.toggle('is-hidden', hidden);
-      button.innerHTML = privacyIcon(hidden);
-      button.setAttribute('aria-label', hidden ? 'إظهار الإيرادات وساعات اللعب' : 'إخفاء الإيرادات وساعات اللعب');
-      button.setAttribute('title', hidden ? 'إظهار التفاصيل' : 'إخفاء التفاصيل');
-      button.setAttribute('aria-pressed', hidden ? 'true' : 'false');
+      if (button.dataset.pzPrivacyState !== state) {
+        button.dataset.pzPrivacyState = state;
+        button.innerHTML = privacyIcon(hidden);
+        button.setAttribute('aria-label', hidden ? 'إظهار الإيرادات وساعات اللعب' : 'إخفاء الإيرادات وساعات اللعب');
+        button.setAttribute('title', hidden ? 'إظهار التفاصيل' : 'إخفاء التفاصيل');
+        button.setAttribute('aria-pressed', hidden ? 'true' : 'false');
+      }
     });
   }
 
