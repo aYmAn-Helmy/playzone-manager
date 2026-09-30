@@ -1,0 +1,153 @@
+name: Build PlayZone Manager v0.33.1 UI Fix Test Package
+
+on:
+  push:
+    branches:
+      - build/playzone-v0331-ui-fix
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate source
+        shell: pwsh
+        run: |
+          python -m py_compile backend/app/main.py backend/app/services.py backend/app/windows_service.py backend/app/embedded_voltra.py backend/voltra_local/dashboard.py
+          node --check frontend/dist/assets/index-v031.js
+          node --check frontend/dist/playzone-responsive.js
+          node --check desktop-shell/main.js
+
+          $backend = Get-Content backend/app/main.py -Raw
+          $frontend = Get-Content frontend/dist/assets/index-v031.js -Raw
+          $responsive = Get-Content frontend/dist/playzone-responsive.js -Raw
+          $responsiveCss = Get-Content frontend/dist/playzone-responsive.css -Raw
+          $all = $backend + "`n" + $frontend + "`n" + $responsive + "`n" + $responsiveCss + "`n" + (Get-Content desktop-shell/main.js -Raw)
+
+          if ($all -match 'abo_aYmAn|abo-ayman-logo') { throw 'Unexpected abo_aYmAn branding detected.' }
+          if ($backend -match '/api/drinks|ensure_drinks_schema|DrinkTab|DrinkItem') { throw 'Unexpected drinks backend detected.' }
+          if ($frontend -match '/api/drinks|المشاريب|o===.drinks.') { throw 'Unexpected drinks UI detected.' }
+          if ($responsive -notmatch 'playzone_dashboard_private_hidden') { throw 'Dashboard privacy eye missing.' }`n          if ($responsive -notmatch "value.textContent = maskText") { throw 'Direct privacy masking missing.' }`n          if ($responsive -notmatch "window.location.assign\('/voltra-console'\)") { throw 'Direct internal Voltra navigation missing.' }
+          if ($responsive -notmatch 'window.location.assign('/voltra-console')') { throw 'Embedded Voltra frame missing.' }
+          if ($backend -notmatch '/api/root/voltra-console') { throw 'ROOT Voltra proxy missing.' }
+          if ($responsiveCss -notmatch 'right:0!important;left:auto!important') { throw 'Right sidebar rule missing.' }
+          if ($responsiveCss -notmatch '#pz-left-scroll-track') { throw 'Custom left scrollbar rule missing.' }`n          if ($responsiveCss -notmatch 'left:2px') { throw 'Left scrollbar position missing.' }`n          if ($responsiveCss -notmatch 'html::-webkit-scrollbar,body::-webkit-scrollbar') { throw 'Native scrollbar hide rule missing.' }
+
+          $files = @('Install-PlayZone-Service.ps1','Launch-PlayZone.ps1','Uninstall-PlayZone-Service.ps1')
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($file,[ref]$tokens,[ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) { throw "$file has PowerShell syntax errors: $($errors[0].Message)" }
+          }
+
+      - name: Install backend validation dependencies
+        shell: pwsh
+        run: |
+          python -m pip install -r backend/requirements.txt
+
+      - name: Validate embedded Voltra bridge
+        shell: pwsh
+        run: |
+          Push-Location backend
+          python -c "from app.main import _embedded_voltra_console_html; h=_embedded_voltra_console_html(); assert 'playzone_token' in h; assert '/api/root/voltra-console' in h; assert 'Voltra API Token' not in h; print('embedded-voltra-ok')"
+          Pop-Location
+
+      - name: Prepare clean package
+        shell: pwsh
+        run: |
+          $pkg = Join-Path $PWD 'package'
+          New-Item -ItemType Directory -Force -Path $pkg | Out-Null
+
+          foreach ($dir in @('backend','frontend','offline-runtime','desktop-shell','desktop-runtime')) {
+            Copy-Item -LiteralPath $dir -Destination (Join-Path $pkg $dir) -Recurse -Force
+          }
+
+          $files = @(
+            'Bootstrap-Portable.ps1',
+            'Install-PlayZone-Service.bat',
+            'Install-PlayZone-Service.ps1',
+            'Launch-PlayZone.ps1',
+            'Uninstall-PlayZone-Service.ps1',
+            'Setup-Root-Password.bat',
+            'Setup-Root-Password.ps1',
+            'Setup-Tailscale-Support.bat',
+            'Setup-Tailscale-Support.ps1',
+            'REMOTE-SUPPORT-SETUP-AR.txt',
+            'TAILSCALE-GRANTS-EXAMPLE.json',
+            'PlayStation.ico',
+            'README-SERVICE-AR.txt',
+            'CHANGES-v0.33-AR.txt',
+            'DESKTOP-RUNTIME-AR.txt',
+            'VERSION.txt'
+          )
+          foreach ($file in $files) {
+            if (Test-Path -LiteralPath $file) {
+              Copy-Item -LiteralPath $file -Destination $pkg -Force
+            }
+          }
+
+          @'
+          PlayZone Manager v0.33.1 - UI Fix Test Package
+          =========================================
+
+          التعديلات المصححة:
+          - عين لإخفاء/إظهار إجمالي الإيرادات وساعات اللعب.
+          - لوحة Voltra تفتح كصفحة داخلية كاملة في نفس نافذة PlayZone مع زر رجوع.
+          - Sidebar على يمين الشاشة.
+          - Scrollbar الأصلي مخفي وتم استبداله بشريط رفيع قابل للسحب على الشمال.
+          - بدون صفحة المشاريب.
+          - الاسم يظل PlayZone Manager.
+
+          التثبيت:
+          1) فك الضغط بالكامل.
+          2) شغّل Install-PlayZone-Service.bat كـ Run as administrator.
+          3) الـUpgrade يحافظ على قاعدة البيانات الموجودة.
+          4) يفضل أخذ Backup من داخل البرنامج قبل التحديث.
+
+          Electron runtime الرسمي مرفق داخل الباكدج.
+          '@ | Set-Content -LiteralPath (Join-Path $pkg 'TEST-INSTRUCTIONS-AR.txt') -Encoding UTF8
+
+      - name: Bundle verified Electron runtime
+        shell: pwsh
+        run: |
+          $version = '44.4.5'
+          $name = "electron-v$version-win32-x64.zip"
+          $url = "https://github.com/electron/electron/releases/download/v$version/$name"
+          $expected = '11c395820a5aaa8ebcc0686b476d0ac98a730274ebfbdc8cf5538a7c2815cb5d'
+          $dest = Join-Path $PWD "package\desktop-runtime\$name"
+          Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $dest
+          $actual = (Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Electron SHA256 mismatch: $actual" }
+
+      - name: Final package checks
+        shell: pwsh
+        run: |
+          if (Test-Path 'package\backend\app\drinks.py') { throw 'drinks.py unexpectedly packaged.' }
+          $bad = Get-ChildItem -LiteralPath package -Recurse -File | Where-Object {
+            $_.Name -match 'abo_aYmAn|abo-ayman|abo-addon'
+          }
+          if ($bad) { throw "Unexpected branded file(s): $($bad.FullName -join ', ')" }
+
+      - name: Create ZIP
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          Compress-Archive -Path package\* -DestinationPath out\PlayZone-Manager-v0.33.1-UI-Fix-Test-Full.zip -CompressionLevel Optimal -Force
+          (Get-FileHash out\PlayZone-Manager-v0.33.1-UI-Fix-Test-Full.zip -Algorithm SHA256).Hash.ToLowerInvariant() |
+            Set-Content out\PlayZone-Manager-v0.33.1-UI-Fix-Test-Full.zip.sha256 -Encoding ASCII
+
+      - name: Upload test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: PlayZone-Manager-v0.33.1-UI-Fix-Test-Full
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
