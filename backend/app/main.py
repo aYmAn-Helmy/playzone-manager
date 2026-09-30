@@ -94,6 +94,13 @@ from .tailscale_support import (
     provision as tailscale_provision,
     reconnect as tailscale_reconnect,
 )
+from .cloudflare_support import (
+    CloudflareSupportError,
+    get_status as cloudflare_status,
+    restart_quick_tunnel as cloudflare_restart,
+    start_quick_tunnel as cloudflare_start,
+    stop_quick_tunnel as cloudflare_stop,
+)
 
 CAIRO = ZoneInfo("Africa/Cairo")
 
@@ -323,6 +330,50 @@ def api_tailscale_disable(actor: User = Depends(root_ready_user), db: Session = 
         db.commit()
         raise HTTPException(409, str(exc)) from exc
     audit(db, actor, "TAILSCALE_SERVE_DISABLED", "system", None)
+    db.commit()
+    return status
+
+
+@app.get("/api/root/cloudflare/status")
+def api_cloudflare_status(_: User = Depends(root_ready_user)):
+    return cloudflare_status()
+
+
+@app.post("/api/root/cloudflare/start")
+def api_cloudflare_start(actor: User = Depends(root_ready_user), db: Session = Depends(get_db)):
+    try:
+        status = cloudflare_start()
+    except CloudflareSupportError as exc:
+        audit(db, actor, "CLOUDFLARE_QUICK_START_FAILED", "system", None, str(exc)[:500])
+        db.commit()
+        raise HTTPException(409, str(exc)) from exc
+    audit(db, actor, "CLOUDFLARE_QUICK_STARTED", "system", None, f"url={status.get('remote_url') or 'STARTING'}")
+    db.commit()
+    return status
+
+
+@app.post("/api/root/cloudflare/stop")
+def api_cloudflare_stop(actor: User = Depends(root_ready_user), db: Session = Depends(get_db)):
+    try:
+        status = cloudflare_stop()
+    except CloudflareSupportError as exc:
+        audit(db, actor, "CLOUDFLARE_QUICK_STOP_FAILED", "system", None, str(exc)[:500])
+        db.commit()
+        raise HTTPException(409, str(exc)) from exc
+    audit(db, actor, "CLOUDFLARE_QUICK_STOPPED", "system", None)
+    db.commit()
+    return status
+
+
+@app.post("/api/root/cloudflare/restart")
+def api_cloudflare_restart(actor: User = Depends(root_ready_user), db: Session = Depends(get_db)):
+    try:
+        status = cloudflare_restart()
+    except CloudflareSupportError as exc:
+        audit(db, actor, "CLOUDFLARE_QUICK_RESTART_FAILED", "system", None, str(exc)[:500])
+        db.commit()
+        raise HTTPException(409, str(exc)) from exc
+    audit(db, actor, "CLOUDFLARE_QUICK_RESTARTED", "system", None, f"url={status.get('remote_url') or 'STARTING'}")
     db.commit()
     return status
 
