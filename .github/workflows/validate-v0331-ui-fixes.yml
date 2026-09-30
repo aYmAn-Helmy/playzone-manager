@@ -33,8 +33,19 @@ jobs:
       - name: Validate direct internal Voltra page
         shell: pwsh
         run: |
+          @'
+          from app.main import _embedded_voltra_console_html
+          h = _embedded_voltra_console_html()
+          assert "playzone_token" in h
+          assert "/api/root/voltra-console" in h
+          assert "Voltra API Token" not in h
+          assert 'href="/"' in h
+          assert "العودة إلى PlayZone" in h
+          assert '<button class="tab active"' in h
+          print("voltra-page-ok")
+          '@ | Set-Content backend/validate_voltra_page.py -Encoding UTF8
           Push-Location backend
-          python -c "from app.main import _embedded_voltra_console_html; h=_embedded_voltra_console_html(); assert 'playzone_token' in h; assert '/api/root/voltra-console' in h; assert 'Voltra API Token' not in h; assert 'href=\"/\"' in h; assert 'العودة إلى PlayZone' in h; assert '<button class=\"tab active\"' in h; print('voltra-page-ok')"
+          python validate_voltra_page.py
           Pop-Location
 
       - name: Install jsdom
