@@ -122,6 +122,26 @@
 }
 
 
+/* Use the same slim scrollbar skin on every nested scrollable surface. */
+*:not(html):not(body){
+  scrollbar-width:thin!important;
+  scrollbar-color:#365d7d transparent!important;
+}
+*:not(html):not(body)::-webkit-scrollbar{
+  width:5px!important;
+  height:5px!important;
+}
+*:not(html):not(body)::-webkit-scrollbar-track{
+  background:transparent!important;
+}
+*:not(html):not(body)::-webkit-scrollbar-thumb{
+  background:#365d7d!important;
+  border-radius:999px!important;
+}
+*:not(html):not(body)::-webkit-scrollbar-thumb:hover{
+  background:#5792bf!important;
+}
+
 /* Hide Chromium's native right scrollbar and draw a thin draggable one on the left. */
 html,body{
   scrollbar-width:none!important;
