@@ -163,6 +163,33 @@ body.pz-scroll-dragging #pz-left-scroll-track{opacity:.92}
 }
 body.pz-scroll-dragging #pz-left-scroll-thumb{cursor:grabbing;background:#5792bf}
 
+
+/* Apply the same compact scrollbar skin to every nested scrollable control. */
+*:not(html):not(body){
+  scrollbar-width:thin;
+  scrollbar-color:#365d7d transparent;
+}
+*:not(html):not(body)::-webkit-scrollbar{
+  width:5px;
+  height:5px;
+}
+*:not(html):not(body)::-webkit-scrollbar-track{
+  background:transparent;
+}
+*:not(html):not(body)::-webkit-scrollbar-thumb{
+  background:#365d7d;
+  border-radius:999px;
+  border:1px solid transparent;
+  background-clip:padding-box;
+}
+*:not(html):not(body)::-webkit-scrollbar-thumb:hover{
+  background:#5792bf;
+  background-clip:padding-box;
+}
+*:not(html):not(body)::-webkit-scrollbar-corner{
+  background:transparent;
+}
+
 /* One privacy eye controls the sensitive daily revenue/gameplay values. */
 .stats{position:relative}
 .pz-privacy-toggle{
