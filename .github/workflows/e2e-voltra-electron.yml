@@ -1,0 +1,147 @@
+name: E2E Voltra Clicks in Electron
+
+on:
+  push:
+    branches:
+      - fix/voltra-clicks-global-scrollbars
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      PLAYZONE_DB_PATH: ${{ runner.temp }}\playzone-e2e.db
+      VOLTRA_DEMO: "1"
+      VOLTRA_TCP_PORT: "10086"
+      VOLTRA_HTTP_PORT: "8086"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install backend dependencies
+        shell: pwsh
+        run: python -m pip install -r backend/requirements.txt
+
+      - name: Prepare activated ROOT test token
+        shell: pwsh
+        run: |
+          @'
+          from app.main import seed_data
+          from app.db import SessionLocal
+          from app.models import AuthToken, User
+          from app.activation import ACTIVATION_HASH_KEY, machine_hash, set_setting
+          from app.security import token_hash, token_expiry
+          from sqlalchemy import select
+
+          seed_data()
+          with SessionLocal() as db:
+              root = db.scalar(select(User).where(User.username == "root"))
+              assert root is not None
+              root.must_change_password = False
+              set_setting(db, ACTIVATION_HASH_KEY, machine_hash())
+              db.query(AuthToken).delete()
+              db.add(AuthToken(
+                  token_hash=token_hash("e2e-root-token"),
+                  user_id=root.id,
+                  expires_at=token_expiry(24),
+              ))
+              db.commit()
+          print("root-token-ready")
+          '@ | Set-Content backend\prepare_e2e.py -Encoding UTF8
+          Push-Location backend
+          python prepare_e2e.py
+          Pop-Location
+
+      - name: Start PlayZone backend with Voltra demo
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath python -ArgumentList '-m','uvicorn','app.main:app','--host','127.0.0.1','--port','8000' -WorkingDirectory backend -PassThru
+          $p.Id | Set-Content backend.pid
+          $ok = $false
+          for ($i=0; $i -lt 60; $i++) {
+            try {
+              $r = Invoke-RestMethod -Uri http://127.0.0.1:8000/api/health -TimeoutSec 2
+              if ($r.ok) { $ok = $true; break }
+            } catch {}
+            Start-Sleep -Milliseconds 500
+          }
+          if (-not $ok) { throw 'PlayZone backend did not start.' }
+
+      - name: Install Electron test runner
+        shell: pwsh
+        run: |
+          npm install --no-save electron@44.4.5 playwright-core@1.55.0
+
+      - name: Test real Voltra clicks inside Electron
+        shell: pwsh
+        run: |
+          @'
+          const { _electron: electron } = require('playwright-core');
+          const electronPath = require('electron');
+
+          (async () => {
+            const electronApp = await electron.launch({
+              executablePath: electronPath,
+              args: ['desktop-shell/main.js'],
+              env: { ...process.env }
+            });
+
+            const page = await electronApp.firstWindow();
+            page.on('dialog', async dialog => { await dialog.accept(); });
+
+            await page.evaluate(() => localStorage.setItem('playzone_token', 'e2e-root-token'));
+            await page.goto('http://127.0.0.1:8000/voltra-console', { waitUntil: 'domcontentloaded' });
+
+            await page.waitForFunction(() =>
+              document.getElementById('connectionBadge')?.textContent?.includes('Voltra متصل'),
+              null,
+              { timeout: 15000 }
+            );
+
+            const networkTab = page.locator('button[data-page="network"]');
+            await networkTab.click();
+            if (!(await page.locator('#page-network').evaluate(el => el.classList.contains('active')))) {
+              throw new Error('Network tab did not activate after a real Electron click.');
+            }
+
+            const mappingTab = page.locator('button[data-page="mapping"]');
+            await mappingTab.click();
+            if (!(await page.locator('#page-mapping').evaluate(el => el.classList.contains('active')))) {
+              throw new Error('Mapping tab did not activate after a real Electron click.');
+            }
+
+            await page.locator('button[data-page="discover"]').click();
+            await page.waitForFunction(() => document.querySelectorAll('#pendingStrips .pending').length > 0, null, { timeout: 15000 });
+
+            const addButton = page.getByRole('button', { name: 'إضافة المشترك' }).first();
+            await addButton.click();
+            await page.waitForFunction(() => document.querySelectorAll('#managedStrips .strip').length > 0, null, { timeout: 15000 });
+
+            const stripsTab = page.locator('button[data-page="strips"]');
+            await stripsTab.click();
+
+            const powerButton = page.getByRole('button', { name: 'تشغيل' }).first();
+            await powerButton.click();
+            await page.waitForFunction(() => document.getElementById('toast')?.textContent?.includes('تم تنفيذ الأمر'), null, { timeout: 15000 });
+
+            console.log('ELECTRON_VOLTRA_CLICKS_OK');
+            await electronApp.close();
+          })().catch(err => {
+            console.error(err);
+            process.exit(1);
+          });
+          '@ | Set-Content electron-voltra-e2e.cjs -Encoding UTF8
+          node electron-voltra-e2e.cjs
+
+      - name: Stop backend
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path backend.pid) {
+            $id = Get-Content backend.pid
+            Stop-Process -Id $id -Force -ErrorAction SilentlyContinue
+          }
