@@ -756,37 +756,23 @@ _VOLTRA_CONSOLE_API = "http://127.0.0.1:8086/voltra/api"
 
 
 def _embedded_voltra_console_html() -> str:
-    """Serve the Voltra dashboard inside PlayZone while keeping data ROOT-only."""
+    """Serve the native Voltra dashboard in PlayZone mode."""
     html = VOLTRA_DASHBOARD_HTML
-    token_marker = "const token=sessionStorage.getItem('voltraToken')||'';"
-    fetch_marker = "const r=await fetch(path,{...opt,headers});"
-    retry_marker = "if(r.status===401&&retry){const entered=prompt('Voltra API Token');if(entered!==null){sessionStorage.setItem('voltraToken',entered);return api(path,opt,false)}}"
-    if token_marker not in html or fetch_marker not in html or retry_marker not in html:
-        raise RuntimeError("Voltra dashboard API wrapper changed; embedded console patch needs review")
-    html = html.replace(token_marker, "const token=localStorage.getItem('playzone_token')||'';")
-    html = html.replace(
-        fetch_marker,
-        "const proxy=path.replace(/^\\/voltra\\/api/,'/api/root/voltra-console');const r=await fetch(proxy,{...opt,headers});",
-    )
-    html = html.replace(
-        retry_marker,
-        "if(r.status===401)throw new Error('جلسة PlayZone غير صالحة أو الحساب ليس ROOT')",
-    )
     html = html.replace(
         "<title>Voltra Power Manager</title>",
         "<title>PlayZone Manager — Voltra</title>",
     )
     html = html.replace(
         "</style></head>",
-        ".pz-playzone-back{position:fixed;top:12px;left:12px;z-index:120;"
+        ".pz-playzone-back{position:fixed;top:12px;left:14px;z-index:180;"
         "display:inline-flex;align-items:center;gap:7px;padding:9px 13px;border-radius:10px;"
         "border:1px solid #2b5778;background:#0b2236e8;color:#ddecfa;text-decoration:none;"
         "font-weight:700;box-shadow:0 7px 24px #0006}.pz-playzone-back:hover{background:#123653;color:#fff}"
         "</style></head>",
     )
     html = html.replace(
-        "<body><div class=\"shell\">",
-        "<body><a class=\"pz-playzone-back\" href=\"/\">← العودة إلى PlayZone</a><div class=\"shell\">",
+        '<body><div class="shell">',
+        '<body><a class="pz-playzone-back" href="/">← العودة إلى PlayZone</a><div class="shell">',
     )
     return html
 
