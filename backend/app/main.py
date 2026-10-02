@@ -172,7 +172,7 @@ UI_CONFIG_DEFAULTS: dict[str, bool] = {
     "show_nav_voltra": True,
 }
 
-app = FastAPI(title="PlayZone Manager API", version="0.33.2")
+app = FastAPI(title="PlayZone Manager API", version="0.34.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
