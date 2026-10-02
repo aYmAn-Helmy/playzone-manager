@@ -3,12 +3,13 @@ $ErrorActionPreference = 'Stop'
 $SourceRoot = $PSScriptRoot
 $InstallRoot = Join-Path $env:ProgramFiles 'PlayZone Manager'
 $DataRoot = Join-Path $env:ProgramData 'PlayZone Manager'
+$SecureDataRoot = Join-Path $DataRoot 'secure-data'
 $ServiceName = 'PlayZoneManager'
 
 function Step([string]$Text) { Write-Host "`n==> $Text" -ForegroundColor Cyan }
 function Fail([string]$Text) { throw $Text }
 
-Write-Host 'PlayZone Manager v0.33 - Universal Responsive Edition' -ForegroundColor Green
+Write-Host 'PlayZone Manager v0.34 - Secure Cash Drawer Edition' -ForegroundColor Green
 Write-Host 'Local backend + private Tailscale Serve support. Cloud Sync is disabled.'
 Write-Host 'Python is bundled offline. The installer downloads and verifies the official Electron/Chromium desktop runtime once if it is not bundled beside the installer.'
 
@@ -28,7 +29,42 @@ foreach ($required in @((Join-Path $PayloadRoot 'python-3.12.6-embed-amd64.zip')
 }
 
 Step 'Preparing installation folders'
-New-Item -ItemType Directory -Force -Path $InstallRoot,$DataRoot,(Join-Path $DataRoot 'logs') | Out-Null
+New-Item -ItemType Directory -Force -Path $InstallRoot,$DataRoot,(Join-Path $DataRoot 'logs'),$SecureDataRoot | Out-Null
+
+Step 'Migrating financial data to protected storage'
+$SecureDb = Join-Path $SecureDataRoot 'playzone.db'
+$LegacyDb = Join-Path $DataRoot 'playzone.db'
+if (-not (Test-Path -LiteralPath $SecureDb) -and (Test-Path -LiteralPath $LegacyDb)) {
+    foreach ($name in @('playzone.db','playzone.db-wal','playzone.db-shm')) {
+        $legacy = Join-Path $DataRoot $name
+        if (Test-Path -LiteralPath $legacy) {
+            Move-Item -LiteralPath $legacy -Destination (Join-Path $SecureDataRoot $name) -Force
+        }
+    }
+    Write-Host 'Existing PlayZone database moved into secure-data.' -ForegroundColor Green
+}
+$LegacyVoltra = Join-Path $DataRoot 'voltra.json'
+$SecureVoltra = Join-Path $SecureDataRoot 'voltra.json'
+if (-not (Test-Path -LiteralPath $SecureVoltra) -and (Test-Path -LiteralPath $LegacyVoltra)) {
+    Move-Item -LiteralPath $LegacyVoltra -Destination $SecureVoltra -Force
+}
+$LegacyBackups = Join-Path $DataRoot 'backups'
+$SecureBackups = Join-Path $SecureDataRoot 'backups'
+if (-not (Test-Path -LiteralPath $SecureBackups) -and (Test-Path -LiteralPath $LegacyBackups)) {
+    Move-Item -LiteralPath $LegacyBackups -Destination $SecureBackups -Force
+}
+
+Step 'Protecting database and backups from standard Windows users'
+# Keep desktop-profile/cache outside this directory. Only LocalSystem (the
+# Windows service) and elevated Administrators can read or modify secure-data.
+& icacls.exe $SecureDataRoot /inheritance:r /Q | Out-Null
+if ($LASTEXITCODE -ne 0) { Fail 'Could not disable inherited permissions on secure-data.' }
+& icacls.exe $SecureDataRoot /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' /Q | Out-Null
+if ($LASTEXITCODE -ne 0) { Fail 'Could not grant SYSTEM/Administrators access to secure-data.' }
+Get-ChildItem -LiteralPath $SecureDataRoot -Force -ErrorAction SilentlyContinue | ForEach-Object {
+    & icacls.exe $_.FullName /reset /T /C /Q | Out-Null
+    if ($LASTEXITCODE -ne 0) { Fail "Could not reset protected ACLs below secure-data: $($_.FullName)" }
+}
 
 # Preserve ProgramData across upgrades. Replace only application binaries.
 Get-ChildItem -LiteralPath $InstallRoot -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
@@ -50,7 +86,7 @@ if ($LASTEXITCODE -ne 0) { Fail "Python runtime setup failed with exit code $LAS
 
 $Python = Join-Path $InstallRoot '.runtime\python\python.exe'
 $Pth = Join-Path $InstallRoot '.runtime\python\python312._pth'
-$env:PLAYZONE_DB_PATH = Join-Path $DataRoot 'playzone.db'
+$env:PLAYZONE_DB_PATH = Join-Path $SecureDataRoot 'playzone.db'
 if (-not (Test-Path $Python)) { Fail "Python runtime missing: $Python" }
 if (-not (Test-Path $Pth)) { Fail "Python path file missing: $Pth" }
 
@@ -88,7 +124,7 @@ Step 'Securing ROOT account'
 & $Python -m app.root_setup status | Out-Host
 $rootStatus = $LASTEXITCODE
 if ($rootStatus -eq 3) {
-    Write-Host 'ROOT password setup is required for v0.33 Universal Responsive Edition.' -ForegroundColor Yellow
+    Write-Host 'ROOT password setup is required for v0.34 Secure Cash Drawer Edition.' -ForegroundColor Yellow
     while ($true) {
         $secure1 = Read-Host 'Enter a new ROOT password (minimum 12 characters)' -AsSecureString
         $secure2 = Read-Host 'Confirm ROOT password' -AsSecureString
