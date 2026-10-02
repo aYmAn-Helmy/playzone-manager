@@ -329,8 +329,12 @@ def _admin_password_approval(
 ) -> User:
     """Re-authenticate an active ADMIN/ROOT for a sensitive cash-drawer action."""
     username = str(admin_username or "").strip()
-    auth_key = f"approval:{requested_by.id}:{username.lower()}"
-    _check_auth_rate_limit(auth_key)
+    auth_keys = [
+        f"approval:{requested_by.id}:{username.lower()}",
+        f"approval-admin:{username.lower()}",
+    ]
+    for auth_key in auth_keys:
+        _check_auth_rate_limit(auth_key)
     admin = db.scalar(select(User).where(User.username == username))
     valid = bool(
         admin
@@ -340,7 +344,8 @@ def _admin_password_approval(
         and verify_password(admin_password, admin.password_hash)
     )
     if not valid:
-        _record_auth_failure(auth_key)
+        for auth_key in auth_keys:
+            _record_auth_failure(auth_key)
         audit(
             db,
             requested_by,
@@ -351,7 +356,8 @@ def _admin_password_approval(
         )
         db.commit()
         raise HTTPException(403, "Invalid admin approval credentials")
-    _clear_auth_failures(auth_key)
+    for auth_key in auth_keys:
+        _clear_auth_failures(auth_key)
     audit(
         db,
         admin,
