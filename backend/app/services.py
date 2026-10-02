@@ -283,10 +283,9 @@ def close_shift(db: Session, shift: Shift, user: User, actual_cash_piasters: int
     if user.role not in ("ROOT", "ADMIN"):
         raise HTTPException(403, "Admin approval is required to close a shift")
     if db.scalar(select(PlaySession.id).where(
-        PlaySession.opened_by_user_id == shift.employee_id,
         PlaySession.status.in_(["RUNNING", "PAUSED", "EXPIRED"]),
     )):
-        raise HTTPException(409, "Cannot close shift while this employee has active sessions")
+        raise HTTPException(409, "Cannot close the drawer while any session is active")
     if db.scalar(select(CashMovement.id).where(
         CashMovement.shift_id == shift.id,
         CashMovement.approval_status == "PENDING",
