@@ -170,6 +170,8 @@ def require_cashier_shift(db: Session, user: User) -> Shift | None:
 def open_shift(db: Session, user: User, opening_cash_piasters: int, at: datetime | None = None) -> Shift:
     if active_shift_for_user(db, user.id):
         raise HTTPException(409, "User already has an open shift")
+    if user.role == "STAFF" and int(opening_cash_piasters) != 0:
+        raise HTTPException(403, "Staff shifts must start at zero; drawer opening cash is admin-controlled")
     at = at or now_utc()
     shift = Shift(employee_id=user.id, opened_at=at, opening_cash_piasters=opening_cash_piasters, status="OPEN")
     db.add(shift)
@@ -191,8 +193,23 @@ def _shift_financials(db: Session, shift_id: int) -> dict[str, int]:
     ).one()
     movement_row = db.execute(
         select(
-            func.coalesce(func.sum(case((CashMovement.movement_type == "CASH_IN", CashMovement.amount_piasters), else_=0)), 0),
-            func.coalesce(func.sum(case((CashMovement.movement_type == "CASH_OUT", CashMovement.amount_piasters), else_=0)), 0),
+            func.coalesce(func.sum(case((
+                (CashMovement.movement_type == "CASH_IN") & (CashMovement.approval_status == "APPROVED"),
+                CashMovement.amount_piasters
+            ), else_=0)), 0),
+            func.coalesce(func.sum(case((
+                (CashMovement.movement_type == "CASH_OUT") & (CashMovement.approval_status == "APPROVED"),
+                CashMovement.amount_piasters
+            ), else_=0)), 0),
+            func.coalesce(func.sum(case((
+                (CashMovement.movement_type == "CASH_IN") & (CashMovement.approval_status == "PENDING"),
+                CashMovement.amount_piasters
+            ), else_=0)), 0),
+            func.coalesce(func.sum(case((
+                (CashMovement.movement_type == "CASH_OUT") & (CashMovement.approval_status == "PENDING"),
+                CashMovement.amount_piasters
+            ), else_=0)), 0),
+            func.coalesce(func.sum(case((CashMovement.approval_status == "PENDING", 1), else_=0)), 0),
         ).where(CashMovement.shift_id == shift_id)
     ).one()
     return {
@@ -202,6 +219,9 @@ def _shift_financials(db: Session, shift_id: int) -> dict[str, int]:
         "instapay_sales": int(invoice_row[3] or 0),
         "cash_in": int(movement_row[0] or 0),
         "cash_out": int(movement_row[1] or 0),
+        "pending_cash_in": int(movement_row[2] or 0),
+        "pending_cash_out": int(movement_row[3] or 0),
+        "pending_movement_count": int(movement_row[4] or 0),
     }
 
 
@@ -229,9 +249,14 @@ def shift_snapshot(db: Session, shift: Shift) -> dict:
         "instapay_sales_piasters": totals["instapay_sales"],
         "cash_in_piasters": totals["cash_in"],
         "cash_out_piasters": totals["cash_out"],
+        "pending_cash_in_piasters": totals["pending_cash_in"],
+        "pending_cash_out_piasters": totals["pending_cash_out"],
+        "pending_movement_count": totals["pending_movement_count"],
         "expected_cash_piasters": expected if shift.status == "OPEN" else shift.expected_cash_piasters,
         "actual_cash_piasters": shift.actual_cash_piasters,
         "cash_difference_piasters": shift.cash_difference_piasters,
+        "closed_by_user_id": shift.closed_by_user_id,
+        "closed_by": ((shift.closed_by.display_name or shift.closed_by.username) if shift.closed_by else None),
         "status": shift.status,
         "invoice_count": totals["invoice_count"],
     }
@@ -240,14 +265,25 @@ def shift_snapshot(db: Session, shift: Shift) -> dict:
 def close_shift(db: Session, shift: Shift, user: User, actual_cash_piasters: int, at: datetime | None = None) -> Shift:
     if shift.status != "OPEN":
         raise HTTPException(409, "Shift is already closed")
-    if shift.employee_id != user.id and user.role not in ("ROOT", "ADMIN"):
-        raise HTTPException(403, "Cannot close another employee's shift")
+    if user.role not in ("ROOT", "ADMIN"):
+        raise HTTPException(403, "Admin approval is required to close a shift")
+    if db.scalar(select(PlaySession.id).where(
+        PlaySession.opened_by_user_id == shift.employee_id,
+        PlaySession.status.in_(["RUNNING", "PAUSED", "EXPIRED"]),
+    )):
+        raise HTTPException(409, "Cannot close shift while this employee has active sessions")
+    if db.scalar(select(CashMovement.id).where(
+        CashMovement.shift_id == shift.id,
+        CashMovement.approval_status == "PENDING",
+    )):
+        raise HTTPException(409, "Resolve all pending cash movements before closing the drawer")
     expected = shift_expected_cash(db, shift)
     at = at or now_utc()
     shift.expected_cash_piasters = expected
     shift.actual_cash_piasters = actual_cash_piasters
     shift.cash_difference_piasters = actual_cash_piasters - expected
     shift.closed_at = at
+    shift.closed_by_user_id = user.id
     shift.status = "CLOSED"
     audit(
         db,
@@ -263,6 +299,7 @@ def close_shift(db: Session, shift: Shift, user: User, actual_cash_piasters: int
 
 
 def add_cash_movement(db: Session, shift: Shift, user: User, movement_type: str, amount_piasters: int, reason: str) -> CashMovement:
+    """Create an immutable pending cash request. It never changes drawer cash until an admin approves it."""
     if shift.status != "OPEN":
         raise HTTPException(409, "Shift is closed")
     if shift.employee_id != user.id and user.role not in ("ROOT", "ADMIN"):
@@ -273,10 +310,57 @@ def add_cash_movement(db: Session, shift: Shift, user: User, movement_type: str,
         movement_type=movement_type,
         amount_piasters=amount_piasters,
         reason=reason,
+        approval_status="PENDING",
     )
     db.add(movement)
     db.flush()
-    audit(db, user, movement_type, "cash_movement", movement.id, f"shift={shift.id};amount={amount_piasters};reason={reason}")
+    audit(
+        db,
+        user,
+        "CASH_MOVEMENT_REQUESTED",
+        "cash_movement",
+        movement.id,
+        f"shift={shift.id};type={movement_type};amount={amount_piasters};reason={reason}",
+    )
+    db.commit()
+    db.refresh(movement)
+    return movement
+
+
+def decide_cash_movement(
+    db: Session,
+    shift: Shift,
+    movement: CashMovement,
+    admin: User,
+    decision: str,
+    at: datetime | None = None,
+) -> CashMovement:
+    if admin.role not in ("ROOT", "ADMIN"):
+        raise HTTPException(403, "Admin approval is required")
+    if shift.status != "OPEN":
+        raise HTTPException(409, "Shift is closed")
+    if movement.shift_id != shift.id:
+        raise HTTPException(409, "Movement does not belong to this shift")
+    if movement.approval_status != "PENDING":
+        raise HTTPException(409, "Cash movement was already decided")
+    decision = str(decision).upper()
+    if decision not in ("APPROVE", "REJECT"):
+        raise HTTPException(422, "Unknown cash movement decision")
+    if decision == "APPROVE" and movement.movement_type == "CASH_OUT":
+        available = shift_expected_cash(db, shift)
+        if movement.amount_piasters > available:
+            raise HTTPException(409, "Cash out exceeds the drawer balance recorded by the system")
+    movement.approval_status = "APPROVED" if decision == "APPROVE" else "REJECTED"
+    movement.decided_by_user_id = admin.id
+    movement.decided_at = at or now_utc()
+    audit(
+        db,
+        admin,
+        f"CASH_MOVEMENT_{movement.approval_status}",
+        "cash_movement",
+        movement.id,
+        f"shift={shift.id};type={movement.movement_type};amount={movement.amount_piasters};requested_by={movement.user_id}",
+    )
     db.commit()
     db.refresh(movement)
     return movement
