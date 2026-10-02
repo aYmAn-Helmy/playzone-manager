@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -24,10 +25,49 @@ def _program_data() -> Path:
     return base
 
 
+def _protect_secure_data(secure_data: Path) -> None:
+    if os.name != "nt":
+        return
+    commands = [
+        ["icacls.exe", str(secure_data), "/inheritance:r", "/Q"],
+        [
+            "icacls.exe",
+            str(secure_data),
+            "/grant:r",
+            "*S-1-5-18:(OI)(CI)F",
+            "*S-1-5-32-544:(OI)(CI)F",
+            "/Q",
+        ],
+    ]
+    for command in commands:
+        completed = subprocess.run(command, capture_output=True, text=True, timeout=15)
+        if completed.returncode != 0:
+            raise RuntimeError(
+                f"Could not secure PlayZone financial data ACL: {' '.join(command)}; "
+                f"{completed.stdout} {completed.stderr}"
+            )
+    # Existing children may have been moved from the legacy ProgramData root and
+    # therefore carry their old ACL. Reset them to inherit only the protected
+    # SYSTEM/Administrators rules from secure-data.
+    for child in secure_data.iterdir():
+        completed = subprocess.run(
+            ["icacls.exe", str(child), "/reset", "/T", "/C", "/Q"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if completed.returncode != 0:
+            raise RuntimeError(
+                f"Could not secure PlayZone data item {child}: "
+                f"{completed.stdout} {completed.stderr}"
+            )
+
+
 def _configure_environment() -> Path:
     data = _program_data()
     secure_data = data / "secure-data"
     secure_data.mkdir(parents=True, exist_ok=True)
+    _protect_secure_data(secure_data)
     os.environ["PLAYZONE_DB_PATH"] = str(secure_data / "playzone.db")
     os.environ["VOLTRA_DATA_PATH"] = str(secure_data / "voltra.json")
     os.environ["VOLTRA_BASE_URL"] = "http://127.0.0.1:8086"
