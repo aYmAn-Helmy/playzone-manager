@@ -138,6 +138,13 @@ jobs:
               r = client.post("/api/shifts/open", headers=hs2, json={"opening_cash_piasters": 0})
               assert_status(r, 409, "second concurrent shift blocked")
 
+              # ADMIN/ROOT supervises the one physical drawer shift even though
+              # it belongs to the cashier who opened it.
+              r = client.get("/api/shifts/current", headers=ha)
+              assert_status(r, 200, "admin sees active physical drawer shift")
+              assert r.json()["id"] == shift_id
+              assert r.json()["username"] == "cashier1"
+
               # Staff cannot fabricate a cash-in.
               r = client.post(
                   f"/api/shifts/{shift_id}/movements",
@@ -170,6 +177,26 @@ jobs:
 
               r = client.get(f"/api/shifts/{shift_id}", headers=hs)
               assert r.json()["expected_cash_piasters"] == 5000
+
+              # A manager who processes a sale during this cashier's shift must
+              # attach the invoice to the same physical drawer shift, not shift_id=None.
+              stations_for_admin = client.get("/api/stations", headers=ha)
+              assert_status(stations_for_admin, 200, "admin lists stations")
+              admin_station_id = stations_for_admin.json()[1]["id"]
+              r = client.post(
+                  f"/api/stations/{admin_station_id}/sessions/start",
+                  headers=ha,
+                  json={"session_type": "OPEN", "duration_seconds": None, "controller_count": 2},
+              )
+              assert_status(r, 200, "admin starts session on active drawer")
+              admin_session_id = r.json()["id"]
+              r = client.post(
+                  f"/api/sessions/{admin_session_id}/end",
+                  headers=ha,
+                  json={"payment_method": "VISA", "discount_piasters": 0},
+              )
+              assert_status(r, 200, "admin finalizes sale on active drawer")
+              assert r.json()["shift_id"] == shift_id
 
               # Staff cannot disguise a cash sale as InstaPay/Visa without admin re-authentication.
               stations = client.get("/api/stations", headers=hs)
@@ -351,6 +378,19 @@ jobs:
               r = client.get("/api/shifts/current", headers=hs)
               assert_status(r, 200, "current shift after close")
               assert r.json() is None
+              r = client.get("/api/shifts/current", headers=ha)
+              assert_status(r, 200, "admin sees no drawer shift after settlement")
+              assert r.json() is None
+
+              # Even ADMIN cannot create financial sessions outside a drawer shift.
+              stations_after_close = client.get("/api/stations", headers=ha)
+              admin_station_after_close = stations_after_close.json()[2]["id"]
+              r = client.post(
+                  f"/api/stations/{admin_station_after_close}/sessions/start",
+                  headers=ha,
+                  json={"session_type": "OPEN", "duration_seconds": None, "controller_count": 2},
+              )
+              assert_status(r, 409, "admin off-shift sale blocked")
 
               r = client.post("/api/shifts/open", headers=hs2, json={"opening_cash_piasters": 0})
               assert_status(r, 200, "next employee shift opens after admin settlement")
