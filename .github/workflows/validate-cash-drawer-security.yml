@@ -1,0 +1,290 @@
+name: Validate Cash Drawer Security
+
+on:
+  push:
+    branches:
+      - security/admin-cash-drawer-approval
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  security-test:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      PLAYZONE_DB_PATH: ${{ runner.temp }}\drawer-security.db
+      VOLTRA_DEMO: "1"
+      VOLTRA_HTTP_PORT: "18086"
+      VOLTRA_TCP_PORT: "18087"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install backend dependencies
+        shell: pwsh
+        run: python -m pip install -r backend/requirements.txt
+
+      - name: Syntax checks
+        shell: pwsh
+        run: |
+          python -m py_compile backend/app/main.py backend/app/services.py backend/app/models.py backend/app/schemas.py backend/app/db.py
+          node --check frontend/dist/assets/index-v031.js
+
+      - name: Run drawer security integration test
+        shell: pwsh
+        run: |
+          @'
+          import os
+          from fastapi.testclient import TestClient
+          from sqlalchemy import select
+
+          from app.main import app
+          from app.db import SessionLocal
+          from app.models import AuthToken, CashMovement, PlaySession, Shift, Station, User
+          from app.activation import ACTIVATION_HASH_KEY, machine_hash, set_setting
+          from app.security import hash_password
+
+          ADMIN_PASSWORD = "Admin-Secure-Password-123!"
+          STAFF_PASSWORD = "Staff-Secure-Password-123!"
+
+          def assert_status(response, code, label):
+              if response.status_code != code:
+                  raise AssertionError(f"{label}: expected {code}, got {response.status_code}: {response.text}")
+
+          with TestClient(app) as client:
+              with SessionLocal() as db:
+                  set_setting(db, ACTIVATION_HASH_KEY, machine_hash())
+                  admin = db.scalar(select(User).where(User.username == "admin"))
+                  assert admin is not None
+                  admin.password_hash = hash_password(ADMIN_PASSWORD)
+                  admin.must_change_password = False
+                  admin.is_active = True
+
+                  staff = User(
+                      username="cashier1",
+                      display_name="Cashier One",
+                      password_hash=hash_password(STAFF_PASSWORD),
+                      role="STAFF",
+                      must_change_password=False,
+                      is_active=True,
+                  )
+                  staff2 = User(
+                      username="cashier2",
+                      display_name="Cashier Two",
+                      password_hash=hash_password(STAFF_PASSWORD),
+                      role="STAFF",
+                      must_change_password=False,
+                      is_active=True,
+                  )
+                  db.add_all([staff, staff2])
+                  db.commit()
+
+              def login(username, password):
+                  r = client.post("/api/auth/login", json={"username": username, "password": password})
+                  assert_status(r, 200, f"login {username}")
+                  return r.json()["token"]
+
+              staff_token = login("cashier1", STAFF_PASSWORD)
+              staff2_token = login("cashier2", STAFF_PASSWORD)
+              admin_token = login("admin", ADMIN_PASSWORD)
+              hs = {"Authorization": f"Bearer {staff_token}"}
+              hs2 = {"Authorization": f"Bearer {staff2_token}"}
+              ha = {"Authorization": f"Bearer {admin_token}"}
+
+              # Staff cannot manipulate opening cash.
+              r = client.post("/api/shifts/open", headers=hs, json={"opening_cash_piasters": 5000})
+              assert_status(r, 403, "staff non-zero opening cash blocked")
+
+              r = client.post("/api/shifts/open", headers=hs, json={"opening_cash_piasters": 0})
+              assert_status(r, 200, "staff opens zero shift")
+              shift = r.json()
+              shift_id = shift["id"]
+              assert shift["expected_cash_piasters"] == 0
+
+              # A second employee cannot open another drawer shift concurrently.
+              r = client.post("/api/shifts/open", headers=hs2, json={"opening_cash_piasters": 0})
+              assert_status(r, 409, "second concurrent shift blocked")
+
+              # Staff cannot fabricate a cash-in.
+              r = client.post(
+                  f"/api/shifts/{shift_id}/movements",
+                  headers=hs,
+                  json={"movement_type": "CASH_IN", "amount_piasters": 5000, "reason": "fake float"},
+              )
+              assert_status(r, 403, "staff cash-in blocked")
+
+              # Admin records a legitimate cash-in; it is STILL pending until password approval.
+              r = client.post(
+                  f"/api/shifts/{shift_id}/movements",
+                  headers=ha,
+                  json={"movement_type": "CASH_IN", "amount_piasters": 5000, "reason": "approved drawer float"},
+              )
+              assert_status(r, 200, "admin cash-in request")
+              cash_in_id = r.json()["id"]
+              assert r.json()["approval_status"] == "PENDING"
+
+              r = client.get(f"/api/shifts/{shift_id}", headers=ha)
+              assert_status(r, 200, "shift after pending cash-in")
+              assert r.json()["expected_cash_piasters"] == 0
+              assert r.json()["pending_cash_in_piasters"] == 5000
+
+              r = client.post(
+                  f"/api/shifts/{shift_id}/movements/{cash_in_id}/decision",
+                  headers=ha,
+                  json={"decision": "APPROVE", "admin_username": "admin", "admin_password": ADMIN_PASSWORD},
+              )
+              assert_status(r, 200, "admin approves cash-in")
+
+              r = client.get(f"/api/shifts/{shift_id}", headers=hs)
+              assert r.json()["expected_cash_piasters"] == 5000
+
+              # Expense request from staff remains pending and cannot reduce expected drawer cash.
+              r = client.post(
+                  f"/api/shifts/{shift_id}/movements",
+                  headers=hs,
+                  json={"movement_type": "CASH_OUT", "amount_piasters": 1200, "reason": "supplies"},
+              )
+              assert_status(r, 200, "staff expense request")
+              expense_id = r.json()["id"]
+              assert r.json()["approval_status"] == "PENDING"
+
+              r = client.get(f"/api/shifts/{shift_id}", headers=hs)
+              assert r.json()["expected_cash_piasters"] == 5000
+              assert r.json()["pending_cash_out_piasters"] == 1200
+
+              # Wrong admin password cannot approve it.
+              r = client.post(
+                  f"/api/shifts/{shift_id}/movements/{expense_id}/decision",
+                  headers=hs,
+                  json={"decision": "APPROVE", "admin_username": "admin", "admin_password": "wrong-password"},
+              )
+              assert_status(r, 401, "wrong admin password blocked")
+              with SessionLocal() as db:
+                  movement = db.get(CashMovement, expense_id)
+                  assert movement.approval_status == "PENDING"
+
+              # Correct admin password approves and ONLY THEN changes expected cash.
+              r = client.post(
+                  f"/api/shifts/{shift_id}/movements/{expense_id}/decision",
+                  headers=hs,
+                  json={"decision": "APPROVE", "admin_username": "admin", "admin_password": ADMIN_PASSWORD},
+              )
+              assert_status(r, 200, "expense approved")
+              r = client.get(f"/api/shifts/{shift_id}", headers=hs)
+              assert r.json()["expected_cash_piasters"] == 3800
+              assert r.json()["pending_cash_out_piasters"] == 0
+
+              # Pending movement blocks drawer close even with a correct admin password.
+              r = client.post(
+                  f"/api/shifts/{shift_id}/movements",
+                  headers=hs,
+                  json={"movement_type": "CASH_OUT", "amount_piasters": 300, "reason": "pending test"},
+              )
+              pending_id = r.json()["id"]
+              r = client.post(
+                  f"/api/shifts/{shift_id}/close",
+                  headers=hs,
+                  json={
+                      "actual_cash_piasters": 3800,
+                      "admin_username": "admin",
+                      "admin_password": ADMIN_PASSWORD,
+                  },
+              )
+              assert_status(r, 409, "pending expense blocks close")
+
+              # Rejecting it keeps expected cash unchanged.
+              r = client.post(
+                  f"/api/shifts/{shift_id}/movements/{pending_id}/decision",
+                  headers=hs,
+                  json={"decision": "REJECT", "admin_username": "admin", "admin_password": ADMIN_PASSWORD},
+              )
+              assert_status(r, 200, "pending expense rejected")
+              r = client.get(f"/api/shifts/{shift_id}", headers=hs)
+              assert r.json()["expected_cash_piasters"] == 3800
+
+              # Any active session blocks close even when admin password is correct.
+              with SessionLocal() as db:
+                  staff = db.scalar(select(User).where(User.username == "cashier1"))
+                  station = db.scalar(select(Station).order_by(Station.id))
+                  active = PlaySession(
+                      station_id=station.id,
+                      opened_by_user_id=staff.id,
+                      status="RUNNING",
+                      hourly_rate_piasters=station.hourly_rate_piasters,
+                      grace_seconds=300,
+                      first_segment=True,
+                      billable_seconds_accrued=0,
+                  )
+                  db.add(active)
+                  db.commit()
+                  active_id = active.id
+
+              r = client.post(
+                  f"/api/shifts/{shift_id}/close",
+                  headers=hs,
+                  json={
+                      "actual_cash_piasters": 3800,
+                      "admin_username": "admin",
+                      "admin_password": ADMIN_PASSWORD,
+                  },
+              )
+              assert_status(r, 409, "active session blocks close")
+              with SessionLocal() as db:
+                  active = db.get(PlaySession, active_id)
+                  db.delete(active)
+                  db.commit()
+
+              # Wrong password cannot close.
+              r = client.post(
+                  f"/api/shifts/{shift_id}/close",
+                  headers=hs,
+                  json={
+                      "actual_cash_piasters": 3800,
+                      "admin_username": "admin",
+                      "admin_password": "wrong-password",
+                  },
+              )
+              assert_status(r, 401, "wrong password close blocked")
+
+              # Correct admin approval settles and closes the drawer.
+              r = client.post(
+                  f"/api/shifts/{shift_id}/close",
+                  headers=hs,
+                  json={
+                      "actual_cash_piasters": 3800,
+                      "admin_username": "admin",
+                      "admin_password": ADMIN_PASSWORD,
+                  },
+              )
+              assert_status(r, 200, "admin closes drawer")
+              closed = r.json()
+              assert closed["status"] == "CLOSED"
+              assert closed["cash_difference_piasters"] == 0
+              assert closed["closed_by"] == "Administrator"
+
+              # Staff current shift is now reset; next shift starts from zero.
+              r = client.get("/api/shifts/current", headers=hs)
+              assert_status(r, 200, "current shift after close")
+              assert r.json() is None
+
+              r = client.post("/api/shifts/open", headers=hs2, json={"opening_cash_piasters": 0})
+              assert_status(r, 200, "next employee shift opens after admin settlement")
+              assert r.json()["expected_cash_piasters"] == 0
+
+          print("CASH_DRAWER_SECURITY_OK")
+          '@ | Set-Content backend\cash_drawer_security_test.py -Encoding UTF8
+
+          Push-Location backend
+          python cash_drawer_security_test.py
+          Pop-Location
+
+      - name: Verify protected UI markers
+        shell: pwsh
+        run: |
+          $js = Get-Content frontend/dist/assets/index-v031.js -Raw
+          if (-not $js.Contains('طلبات نقدية معلقة')) { throw 'Pending cash review UI missing.' }
+          if (-not $js.Contains('admin_password')) { throw 'Admin password close/approval UI missing.' }
+          if (-not $js.Contains('إرسال طلب للمراجعة')) { throw 'Cash request wording missing.' }
+          if (-not $js.Contains('تصفية وإقفال الوردية')) { throw 'Admin settlement wording missing.' }
