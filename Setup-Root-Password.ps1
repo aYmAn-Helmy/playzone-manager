@@ -4,13 +4,14 @@ $ErrorActionPreference = 'Stop'
 $InstallRoot = if (Test-Path (Join-Path $PSScriptRoot '.runtime\python\python.exe')) { $PSScriptRoot } else { Join-Path $env:ProgramFiles 'PlayZone Manager' }
 $Python = Join-Path $InstallRoot '.runtime\python\python.exe'
 $DataRoot = Join-Path $env:ProgramData 'PlayZone Manager'
-$env:PLAYZONE_DB_PATH = Join-Path $DataRoot 'playzone.db'
+$SecureDataRoot = Join-Path $DataRoot 'secure-data'
+$env:PLAYZONE_DB_PATH = Join-Path $SecureDataRoot 'playzone.db'
 
 if (-not (Test-Path -LiteralPath $Python)) {
     throw "PlayZone runtime not found. Install PlayZone Manager first: $Python"
 }
 
-Write-Host 'PlayZone Manager v0.31 - ROOT Password Setup' -ForegroundColor Cyan
+Write-Host 'PlayZone Manager v0.34 - ROOT Password Setup' -ForegroundColor Cyan
 Write-Host 'This resets the ROOT password locally and invalidates existing ROOT login tokens.'
 
 while ($true) {
