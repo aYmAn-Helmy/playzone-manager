@@ -34,6 +34,9 @@ New-Item -ItemType Directory -Force -Path $InstallRoot,$DataRoot,(Join-Path $Dat
 Step 'Migrating financial data to protected storage'
 $SecureDb = Join-Path $SecureDataRoot 'playzone.db'
 $LegacyDb = Join-Path $DataRoot 'playzone.db'
+if ((Test-Path -LiteralPath $SecureDb) -and (Test-Path -LiteralPath $LegacyDb)) {
+    Fail "Both legacy and secure PlayZone databases exist. Installation stopped to avoid choosing the wrong financial database. Keep the correct database and move the other one aside, then run the installer again."
+}
 if (-not (Test-Path -LiteralPath $SecureDb) -and (Test-Path -LiteralPath $LegacyDb)) {
     foreach ($name in @('playzone.db','playzone.db-wal','playzone.db-shm')) {
         $legacy = Join-Path $DataRoot $name
@@ -43,16 +46,32 @@ if (-not (Test-Path -LiteralPath $SecureDb) -and (Test-Path -LiteralPath $Legacy
     }
     Write-Host 'Existing PlayZone database moved into secure-data.' -ForegroundColor Green
 }
+
 $LegacyVoltra = Join-Path $DataRoot 'voltra.json'
 $SecureVoltra = Join-Path $SecureDataRoot 'voltra.json'
-if (-not (Test-Path -LiteralPath $SecureVoltra) -and (Test-Path -LiteralPath $LegacyVoltra)) {
-    Move-Item -LiteralPath $LegacyVoltra -Destination $SecureVoltra -Force
+if (Test-Path -LiteralPath $LegacyVoltra) {
+    if (-not (Test-Path -LiteralPath $SecureVoltra)) {
+        Move-Item -LiteralPath $LegacyVoltra -Destination $SecureVoltra -Force
+    } else {
+        $archiveName = 'voltra-legacy-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.json'
+        Move-Item -LiteralPath $LegacyVoltra -Destination (Join-Path $SecureDataRoot $archiveName) -Force
+    }
 }
+
 $LegacyBackups = Join-Path $DataRoot 'backups'
 $SecureBackups = Join-Path $SecureDataRoot 'backups'
-if (-not (Test-Path -LiteralPath $SecureBackups) -and (Test-Path -LiteralPath $LegacyBackups)) {
-    Move-Item -LiteralPath $LegacyBackups -Destination $SecureBackups -Force
+if (Test-Path -LiteralPath $LegacyBackups) {
+    New-Item -ItemType Directory -Force -Path $SecureBackups | Out-Null
+    foreach ($legacyBackup in Get-ChildItem -LiteralPath $LegacyBackups -File -Force -ErrorAction SilentlyContinue) {
+        $destination = Join-Path $SecureBackups $legacyBackup.Name
+        if (Test-Path -LiteralPath $destination) {
+            $destination = Join-Path $SecureBackups ('legacy-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '-' + $legacyBackup.Name)
+        }
+        Move-Item -LiteralPath $legacyBackup.FullName -Destination $destination -Force
+    }
+    Remove-Item -LiteralPath $LegacyBackups -Recurse -Force -ErrorAction SilentlyContinue
 }
+
 
 Step 'Protecting database and backups from standard Windows users'
 # Keep desktop-profile/cache outside this directory. Only LocalSystem (the
