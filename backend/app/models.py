@@ -178,6 +178,45 @@ class Shift(Base):
     invoices: Mapped[list["Invoice"]] = relationship(back_populates="shift")
 
 
+class ShiftHandoff(Base):
+    __tablename__ = "shift_handoffs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    shift_id: Mapped[int] = mapped_column(ForeignKey("shifts.id"), index=True)
+    from_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    to_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    handed_off_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    shift: Mapped[Shift] = relationship()
+    from_user: Mapped[User] = relationship(foreign_keys=[from_user_id])
+    to_user: Mapped[User] = relationship(foreign_keys=[to_user_id])
+
+
+class DrawerSettlement(Base):
+    __tablename__ = "drawer_settlements"
+    __table_args__ = (UniqueConstraint("shift_id", name="uq_drawer_settlement_shift"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    shift_id: Mapped[int] = mapped_column(ForeignKey("shifts.id"), unique=True, index=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    closed_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    shift_opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    settled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    opening_cash_piasters: Mapped[int] = mapped_column(Integer, default=0)
+    cash_sales_piasters: Mapped[int] = mapped_column(Integer, default=0)
+    cash_in_piasters: Mapped[int] = mapped_column(Integer, default=0)
+    cash_out_piasters: Mapped[int] = mapped_column(Integer, default=0)
+    expected_cash_piasters: Mapped[int] = mapped_column(Integer, default=0)
+    actual_cash_piasters: Mapped[int] = mapped_column(Integer, default=0)
+    cash_difference_piasters: Mapped[int] = mapped_column(Integer, default=0)
+    invoice_count: Mapped[int] = mapped_column(Integer, default=0)
+    active_sessions_at_close: Mapped[int] = mapped_column(Integer, default=0)
+
+    shift: Mapped[Shift] = relationship()
+    employee: Mapped[User] = relationship(foreign_keys=[employee_id])
+    closed_by: Mapped[User] = relationship(foreign_keys=[closed_by_user_id])
+
+
 class CashMovement(Base):
     __tablename__ = "cash_movements"
 
