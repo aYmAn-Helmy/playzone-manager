@@ -35,7 +35,7 @@ from .billing import normalize_utc
 from .db import BACKUP_DIR, Base, SessionLocal, engine, get_db, migrate_existing_database
 from .embedded_voltra import start_embedded_voltra, stop_embedded_voltra
 from voltra_local.dashboard import DASHBOARD as VOLTRA_DASHBOARD_HTML
-from .models import AuditLog, AuthToken, CashMovement, Invoice, PlaySession, Product, Shift, Station, SystemSetting, User
+from .models import AuditLog, AuthToken, CashMovement, DrawerSettlement, Invoice, PlaySession, Product, Shift, ShiftHandoff, Station, SystemSetting, User
 from .schemas import (
     AddItem,
     CashMovementCreate,
@@ -56,6 +56,7 @@ from .schemas import (
     ProductUpdate,
     SettingUpdate,
     ShiftCloseRequest,
+    ShiftHandoffRequest,
     ShiftOpenRequest,
     StationOut,
     StationUpdate,
@@ -78,6 +79,7 @@ from .services import (
     end_session,
     expire_timed_session,
     extend_timed_session,
+    handoff_shift,
     open_shift,
     pause_session,
     require_cashier_shift,
@@ -1449,6 +1451,108 @@ def api_cash_movement_decision(
         }
 
 
+@app.get("/api/shifts/{shift_id}/handoff-candidates")
+def shift_handoff_candidates(
+    shift_id: int,
+    user: User = Depends(ready_user),
+    db: Session = Depends(get_db),
+):
+    shift = db.get(Shift, shift_id)
+    if not shift:
+        raise HTTPException(404, "Shift not found")
+    if shift.status != "OPEN":
+        raise HTTPException(409, "Shift is closed")
+    if user.role not in ("ROOT", "ADMIN") and shift.employee_id != user.id:
+        raise HTTPException(403, "Only the current cashier can hand off this shift")
+    rows = db.scalars(
+        select(User).where(
+            User.role == "STAFF",
+            User.is_active.is_(True),
+            User.id != shift.employee_id,
+        ).order_by(User.display_name, User.username)
+    ).all()
+    return [
+        {"id": row.id, "username": row.username, "display_name": row.display_name or row.username}
+        for row in rows
+        if not active_shift_for_user(db, row.id)
+    ]
+
+
+@app.post("/api/shifts/{shift_id}/handoff")
+def api_shift_handoff(
+    shift_id: int,
+    payload: ShiftHandoffRequest,
+    authorization: str = Header(),
+    user: User = Depends(ready_user),
+    db: Session = Depends(get_db),
+):
+    requester_id = user.id
+    with _CASH_DRAWER_LOCK:
+        db.rollback()
+        requester = db.get(User, requester_id)
+        shift = db.get(Shift, shift_id)
+        if not shift:
+            raise HTTPException(404, "Shift not found")
+        if shift.status != "OPEN":
+            raise HTTPException(409, "Shift is closed")
+        if requester.role not in ("ROOT", "ADMIN") and shift.employee_id != requester.id:
+            raise HTTPException(403, "Only the current cashier can hand off this shift")
+
+        incoming = db.get(User, payload.to_user_id)
+        auth_key = f"handoff:{shift.id}:{payload.to_user_id}"
+        _check_auth_rate_limit(auth_key)
+        valid = bool(
+            incoming
+            and incoming.is_active
+            and incoming.role == "STAFF"
+            and not incoming.must_change_password
+            and verify_password(payload.password, incoming.password_hash)
+        )
+        if not valid:
+            _record_auth_failure(auth_key)
+            audit(
+                db,
+                requester,
+                "SHIFT_HANDOFF_AUTH_FAILED",
+                "shift",
+                shift.id,
+                f"to_user_id={payload.to_user_id}",
+            )
+            db.commit()
+            raise HTTPException(401, "Invalid receiving employee password")
+        _clear_auth_failures(auth_key)
+
+        previous_employee_id = shift.employee_id
+        handoff_shift(db, shift, requester, incoming)
+
+        # A handoff is an account switch, not just a name change. Invalidate all
+        # cashier sessions for both sides and issue one fresh token to the receiver.
+        for token in list(db.scalars(select(AuthToken).where(
+            AuthToken.user_id.in_([previous_employee_id, incoming.id])
+        ))):
+            db.delete(token)
+        raw = new_token()
+        db.add(AuthToken(token_hash=token_hash(raw), user_id=incoming.id, expires_at=token_expiry()))
+        audit(
+            db,
+            incoming,
+            "SHIFT_HANDOFF_LOGIN",
+            "shift",
+            shift.id,
+            f"from={previous_employee_id};to={incoming.id}",
+        )
+        db.commit()
+
+        refreshed = db.get(Shift, shift.id)
+        return {
+            "token": raw,
+            "role": incoming.role,
+            "username": incoming.username,
+            "display_name": incoming.display_name or incoming.username,
+            "shift": shift_snapshot(db, refreshed),
+        }
+
+
 @app.post("/api/shifts/{shift_id}/close")
 def api_close_shift(shift_id: int, payload: ShiftCloseRequest, user: User = Depends(ready_user), db: Session = Depends(get_db)):
     requester_id = user.id
@@ -1469,17 +1573,7 @@ def api_close_shift(shift_id: int, payload: ShiftCloseRequest, user: User = Depe
             purpose=f"close_shift:{shift.id}",
         )
         closed = close_shift(db, shift, admin, payload.actual_cash_piasters)
-        audit(
-            db,
-            admin,
-            "DRAWER_SETTLED",
-            "shift",
-            shift.id,
-            f"cashier={shift.employee_id};requested_by={requester_id};actual={payload.actual_cash_piasters}",
-        )
-        db.commit()
         return shift_snapshot(db, closed)
-
 
 # ---- Sessions / invoices -------------------------------------------------
 
@@ -1878,8 +1972,53 @@ def report_summary(date_from: str | None = None, date_to: str | None = None,
             "invoice_count": sum(1 for i in invs if i.multi_4_seconds > 0),
         },
     ]
+    settlement_rows = []
+    for row in db.scalars(
+        select(DrawerSettlement)
+        .where(DrawerSettlement.settled_at >= start, DrawerSettlement.settled_at <= end)
+        .order_by(DrawerSettlement.id.desc())
+        .options(joinedload(DrawerSettlement.employee), joinedload(DrawerSettlement.closed_by))
+    ):
+        settlement_rows.append({
+            "settlement_number": row.id,
+            "shift_id": row.shift_id,
+            "shift_opened_at": normalize_utc(row.shift_opened_at),
+            "settled_at": normalize_utc(row.settled_at),
+            "employee": row.employee.display_name or row.employee.username,
+            "username": row.employee.username,
+            "closed_by": row.closed_by.display_name or row.closed_by.username,
+            "closed_by_username": row.closed_by.username,
+            "opening_cash_piasters": row.opening_cash_piasters,
+            "cash_sales_piasters": row.cash_sales_piasters,
+            "cash_in_piasters": row.cash_in_piasters,
+            "cash_out_piasters": row.cash_out_piasters,
+            "expected_cash_piasters": row.expected_cash_piasters,
+            "actual_cash_piasters": row.actual_cash_piasters,
+            "cash_difference_piasters": row.cash_difference_piasters,
+            "invoice_count": row.invoice_count,
+            "active_sessions_at_close": row.active_sessions_at_close,
+        })
+
+    handoff_rows = []
+    for row in db.scalars(
+        select(ShiftHandoff)
+        .where(ShiftHandoff.handed_off_at >= start, ShiftHandoff.handed_off_at <= end)
+        .order_by(ShiftHandoff.id.desc())
+        .options(joinedload(ShiftHandoff.from_user), joinedload(ShiftHandoff.to_user))
+    ):
+        handoff_rows.append({
+            "id": row.id,
+            "shift_id": row.shift_id,
+            "handed_off_at": normalize_utc(row.handed_off_at),
+            "from_employee": row.from_user.display_name or row.from_user.username,
+            "from_username": row.from_user.username,
+            "to_employee": row.to_user.display_name or row.to_user.username,
+            "to_username": row.to_user.username,
+        })
+
     return {"date_from": start, "date_to": end, "sales": sales, "multi": multi_rows, "stations": station_rows,
-            "employees": employee_rows, "products": list(product_totals.values()), "shifts": shift_rows}
+            "employees": employee_rows, "products": list(product_totals.values()), "shifts": shift_rows,
+            "drawer_settlements": settlement_rows, "shift_handoffs": handoff_rows}
 
 
 @app.get("/api/audit")
