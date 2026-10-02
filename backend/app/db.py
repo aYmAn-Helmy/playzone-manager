@@ -34,7 +34,10 @@ class Base(DeclarativeBase):
 
 
 def migrate_existing_database() -> None:
-    """Add columns and indexes without replacing historical SQLite data."""
+    """Add tables, columns and indexes without replacing historical SQLite data."""
+    # Restore can load an older backup after process startup. Re-run create_all so
+    # newly introduced append-only tables (handoffs/settlements) exist there too.
+    Base.metadata.create_all(engine)
     columns = {
         "users": {"display_name": "VARCHAR(100)", "must_change_password": "BOOLEAN NOT NULL DEFAULT 0"},
         "invoices": {
