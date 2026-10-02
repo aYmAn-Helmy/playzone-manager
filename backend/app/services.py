@@ -12,6 +12,7 @@ from .billing import amount_piasters, live_billable_seconds, normalize_utc, seco
 from .models import (
     AuditLog,
     CashMovement,
+    DrawerSettlement,
     Invoice,
     InvoiceSequence,
     PlaySession,
@@ -19,6 +20,7 @@ from .models import (
     SessionEvent,
     SessionItem,
     Shift,
+    ShiftHandoff,
     Station,
     SystemSetting,
     User,
@@ -278,39 +280,116 @@ def shift_snapshot(db: Session, shift: Shift) -> dict:
 
 
 def close_shift(db: Session, shift: Shift, user: User, actual_cash_piasters: int, at: datetime | None = None) -> Shift:
+    """Settle one drawer shift without interrupting active PlayStation sessions.
+
+    Active sessions intentionally survive settlement. Any invoice finalized after
+    settlement belongs to whichever new shift is open at payment time.
+    """
     if shift.status != "OPEN":
         raise HTTPException(409, "Shift is already closed")
     if user.role not in ("ROOT", "ADMIN"):
         raise HTTPException(403, "Admin approval is required to close a shift")
-    if db.scalar(select(PlaySession.id).where(
-        PlaySession.status.in_(["RUNNING", "PAUSED", "EXPIRED"]),
-    )):
-        raise HTTPException(409, "Cannot close the drawer while any session is active")
     if db.scalar(select(CashMovement.id).where(
         CashMovement.shift_id == shift.id,
         CashMovement.approval_status == "PENDING",
     )):
         raise HTTPException(409, "Resolve all pending cash movements before closing the drawer")
-    expected = shift_expected_cash(db, shift)
+
+    totals = _shift_financials(db, shift.id)
+    expected = shift.opening_cash_piasters + totals["cash_sales"] + totals["cash_in"] - totals["cash_out"]
+    active_sessions = int(db.scalar(
+        select(func.count(PlaySession.id)).where(
+            PlaySession.status.in_(["RUNNING", "PAUSED", "EXPIRED"])
+        )
+    ) or 0)
     at = at or now_utc()
+
     shift.expected_cash_piasters = expected
     shift.actual_cash_piasters = actual_cash_piasters
     shift.cash_difference_piasters = actual_cash_piasters - expected
     shift.closed_at = at
     shift.closed_by_user_id = user.id
     shift.status = "CLOSED"
+    db.flush()
+
+    settlement = DrawerSettlement(
+        shift_id=shift.id,
+        employee_id=shift.employee_id,
+        closed_by_user_id=user.id,
+        shift_opened_at=shift.opened_at,
+        settled_at=at,
+        opening_cash_piasters=shift.opening_cash_piasters,
+        cash_sales_piasters=totals["cash_sales"],
+        cash_in_piasters=totals["cash_in"],
+        cash_out_piasters=totals["cash_out"],
+        expected_cash_piasters=expected,
+        actual_cash_piasters=actual_cash_piasters,
+        cash_difference_piasters=shift.cash_difference_piasters,
+        invoice_count=totals["invoice_count"],
+        active_sessions_at_close=active_sessions,
+    )
+    db.add(settlement)
+    db.flush()
+
     audit(
         db,
         user,
         "SHIFT_CLOSED",
         "shift",
         shift.id,
-        f"system_cash={expected};actual={actual_cash_piasters};difference={shift.cash_difference_piasters}",
+        (
+            f"settlement_no={settlement.id};system_cash={expected};actual={actual_cash_piasters};"
+            f"difference={shift.cash_difference_piasters};active_sessions={active_sessions}"
+        ),
+    )
+    audit(
+        db,
+        user,
+        "DRAWER_SETTLED",
+        "drawer_settlement",
+        settlement.id,
+        f"shift={shift.id};cashier={shift.employee_id};active_sessions={active_sessions}",
     )
     db.commit()
     db.refresh(shift)
     return shift
 
+
+def handoff_shift(db: Session, shift: Shift, outgoing: User, incoming: User, at: datetime | None = None) -> ShiftHandoff:
+    if shift.status != "OPEN":
+        raise HTTPException(409, "Shift is closed")
+    if outgoing.role not in ("ROOT", "ADMIN") and shift.employee_id != outgoing.id:
+        raise HTTPException(403, "Only the current cashier can hand off this shift")
+    if incoming.role != "STAFF" or not incoming.is_active:
+        raise HTTPException(422, "The receiving account must be an active staff user")
+    if incoming.must_change_password:
+        raise HTTPException(409, "Receiving employee must change their password before taking a shift")
+    if incoming.id == shift.employee_id:
+        raise HTTPException(409, "The selected employee already owns this shift")
+    if active_shift_for_user(db, incoming.id):
+        raise HTTPException(409, "Receiving employee already has an open shift")
+
+    previous_employee_id = shift.employee_id
+    shift.employee_id = incoming.id
+    event = ShiftHandoff(
+        shift_id=shift.id,
+        from_user_id=previous_employee_id,
+        to_user_id=incoming.id,
+        handed_off_at=at or now_utc(),
+    )
+    db.add(event)
+    db.flush()
+    audit(
+        db,
+        incoming,
+        "SHIFT_HANDOFF_ACCEPTED",
+        "shift",
+        shift.id,
+        f"from={previous_employee_id};to={incoming.id};handoff_id={event.id}",
+    )
+    db.commit()
+    db.refresh(event)
+    return event
 
 def add_cash_movement(db: Session, shift: Shift, user: User, movement_type: str, amount_piasters: int, reason: str) -> CashMovement:
     """Create an immutable pending cash request. It never changes drawer cash until an admin approves it."""
