@@ -349,7 +349,7 @@ def _admin_password_approval(
             f"purpose={purpose};requested_admin={username[:80]}",
         )
         db.commit()
-        raise HTTPException(401, "Invalid admin approval credentials")
+        raise HTTPException(403, "Invalid admin approval credentials")
     _clear_auth_failures(auth_key)
     audit(
         db,
