@@ -314,13 +314,14 @@ jobs:
               r = client.get(f"/api/shifts/{shift_id}", headers=hs)
               assert r.json()["expected_cash_piasters"] == 3800
 
-              # Any active session blocks close even when admin password is correct.
+              # Any active session blocks close even if it was opened by ADMIN
+              # during this cashier's physical drawer shift.
               with SessionLocal() as db:
-                  staff = db.scalar(select(User).where(User.username == "cashier1"))
+                  admin_user = db.scalar(select(User).where(User.username == "admin"))
                   station = db.scalar(select(Station).order_by(Station.id))
                   active = PlaySession(
                       station_id=station.id,
-                      opened_by_user_id=staff.id,
+                      opened_by_user_id=admin_user.id,
                       status="RUNNING",
                       hourly_rate_piasters=station.hourly_rate_piasters,
                       grace_seconds=300,
@@ -340,7 +341,7 @@ jobs:
                       "admin_password": ADMIN_PASSWORD,
                   },
               )
-              assert_status(r, 409, "active session blocks close")
+              assert_status(r, 409, "admin-opened active session blocks close")
               with SessionLocal() as db:
                   active = db.get(PlaySession, active_id)
                   db.delete(active)
