@@ -160,7 +160,7 @@ jobs:
                   headers=hs,
                   json={"decision": "APPROVE", "admin_username": "admin", "admin_password": "wrong-password"},
               )
-              assert_status(r, 401, "wrong admin password blocked")
+              assert_status(r, 403, "wrong admin password blocked")
               with SessionLocal() as db:
                   movement = db.get(CashMovement, expense_id)
                   assert movement.approval_status == "PENDING"
@@ -246,7 +246,7 @@ jobs:
                       "admin_password": "wrong-password",
                   },
               )
-              assert_status(r, 401, "wrong password close blocked")
+              assert_status(r, 403, "wrong password close blocked")
 
               # Correct admin approval settles and closes the drawer.
               r = client.post(
