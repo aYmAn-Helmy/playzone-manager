@@ -140,6 +140,58 @@ jobs:
               r = client.get(f"/api/shifts/{shift_id}", headers=hs)
               assert r.json()["expected_cash_piasters"] == 5000
 
+              # Staff cannot disguise a cash sale as InstaPay/Visa without admin re-authentication.
+              stations = client.get("/api/stations", headers=hs)
+              assert_status(stations, 200, "list stations for non-cash fraud test")
+              station_id = stations.json()[0]["id"]
+              r = client.post(
+                  f"/api/stations/{station_id}/sessions/start",
+                  headers=hs,
+                  json={"session_type": "OPEN", "duration_seconds": None, "controller_count": 2},
+              )
+              assert_status(r, 200, "start session for non-cash fraud test")
+              payment_session_id = r.json()["id"]
+
+              r = client.post(
+                  f"/api/sessions/{payment_session_id}/end",
+                  headers=hs,
+                  json={"payment_method": "INSTAPAY", "discount_piasters": 0},
+              )
+              assert_status(r, 403, "staff non-cash without admin approval blocked")
+              with SessionLocal() as db:
+                  session = db.get(PlaySession, payment_session_id)
+                  assert session.status != "ENDED"
+
+              r = client.post(
+                  f"/api/sessions/{payment_session_id}/end",
+                  headers=hs,
+                  json={
+                      "payment_method": "INSTAPAY",
+                      "discount_piasters": 0,
+                      "admin_username": "admin",
+                      "admin_password": "wrong-password",
+                  },
+              )
+              assert_status(r, 403, "staff non-cash with wrong admin password blocked")
+              with SessionLocal() as db:
+                  session = db.get(PlaySession, payment_session_id)
+                  assert session.status != "ENDED"
+
+              r = client.post(
+                  f"/api/sessions/{payment_session_id}/end",
+                  headers=hs,
+                  json={
+                      "payment_method": "INSTAPAY",
+                      "discount_piasters": 0,
+                      "admin_username": "admin",
+                      "admin_password": ADMIN_PASSWORD,
+                  },
+              )
+              assert_status(r, 200, "staff non-cash with admin approval allowed")
+              assert r.json()["payment_method"] == "INSTAPAY"
+              r = client.get(f"/api/shifts/{shift_id}", headers=hs)
+              assert r.json()["expected_cash_piasters"] == 5000
+
               # Expense request from staff remains pending and cannot reduce expected drawer cash.
               r = client.post(
                   f"/api/shifts/{shift_id}/movements",
@@ -288,3 +340,5 @@ jobs:
           if (-not $js.Contains('admin_password')) { throw 'Admin password close/approval UI missing.' }
           if (-not $js.Contains('إرسال طلب للمراجعة')) { throw 'Cash request wording missing.' }
           if (-not $js.Contains('تصفية وإقفال الوردية')) { throw 'Admin settlement wording missing.' }
+          if (-not $js.Contains('الدفع غير النقدي يحتاج اعتماد مدير')) { throw 'Non-cash admin approval UI missing.' }
+          if (-not $js.Contains('noncash-admin-password')) { throw 'Non-cash admin password field missing.' }
