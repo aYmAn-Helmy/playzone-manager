@@ -50,6 +50,14 @@ def migrate_existing_database() -> None:
             "payment_method": "VARCHAR(20) NOT NULL DEFAULT 'CASH'",
             "shift_id": "INTEGER REFERENCES shifts(id)",
         },
+        "shifts": {
+            "closed_by_user_id": "INTEGER REFERENCES users(id)",
+        },
+        "cash_movements": {
+            "approval_status": "VARCHAR(20) NOT NULL DEFAULT 'APPROVED'",
+            "decided_by_user_id": "INTEGER REFERENCES users(id)",
+            "decided_at": "DATETIME",
+        },
         "play_sessions": {
             "power_start_status": "VARCHAR(30)",
             "power_start_message": "VARCHAR(500)",
@@ -88,6 +96,8 @@ def migrate_existing_database() -> None:
         connection.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_play_sessions_status_type ON play_sessions(status, session_type)")
         if connection.exec_driver_sql("SELECT 1 FROM sqlite_master WHERE type='table' AND name='shifts'").first():
             connection.exec_driver_sql("CREATE UNIQUE INDEX IF NOT EXISTS uq_open_employee_shift ON shifts(employee_id) WHERE status='OPEN'")
+        if connection.exec_driver_sql("SELECT 1 FROM sqlite_master WHERE type='table' AND name='cash_movements'").first():
+            connection.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_cash_movements_shift_approval ON cash_movements(shift_id, approval_status)")
 
 
 def get_db():
