@@ -121,6 +121,8 @@ class TimedSessionExtendRequest(BaseModel):
 class PaymentRequest(BaseModel):
     payment_method: str = Field(pattern=r"^(CASH|INSTAPAY|VISA)$")
     discount_piasters: int = Field(default=0, ge=0)
+    admin_username: str | None = Field(default=None, max_length=80)
+    admin_password: str | None = Field(default=None, max_length=300)
 
 
 class PaymentMethodsUpdate(BaseModel):
