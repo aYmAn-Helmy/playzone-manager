@@ -26,8 +26,10 @@ def _program_data() -> Path:
 
 def _configure_environment() -> Path:
     data = _program_data()
-    os.environ["PLAYZONE_DB_PATH"] = str(data / "playzone.db")
-    os.environ["VOLTRA_DATA_PATH"] = str(data / "voltra.json")
+    secure_data = data / "secure-data"
+    secure_data.mkdir(parents=True, exist_ok=True)
+    os.environ["PLAYZONE_DB_PATH"] = str(secure_data / "playzone.db")
+    os.environ["VOLTRA_DATA_PATH"] = str(secure_data / "voltra.json")
     os.environ["VOLTRA_BASE_URL"] = "http://127.0.0.1:8086"
     os.environ["VOLTRA_EMBEDDED"] = "1"
     os.environ.setdefault("VOLTRA_DEMO", "0")
