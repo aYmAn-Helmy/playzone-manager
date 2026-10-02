@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 from fastapi import HTTPException
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from .billing import amount_piasters, live_billable_seconds, normalize_utc, seconds_between, segment_billable_seconds, weighted_amount_piasters
 from .models import (
@@ -178,7 +179,11 @@ def open_shift(db: Session, user: User, opening_cash_piasters: int, at: datetime
     at = at or now_utc()
     shift = Shift(employee_id=user.id, opened_at=at, opening_cash_piasters=opening_cash_piasters, status="OPEN")
     db.add(shift)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(409, "Another cashier shift is already open for this drawer") from exc
     audit(db, user, "SHIFT_OPENED", "shift", shift.id, f"opening_cash={opening_cash_piasters}")
     db.commit()
     db.refresh(shift)
