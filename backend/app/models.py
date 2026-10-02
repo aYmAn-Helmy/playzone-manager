@@ -165,13 +165,15 @@ class Shift(Base):
     employee_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    closed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     opening_cash_piasters: Mapped[int] = mapped_column(Integer)
     expected_cash_piasters: Mapped[int | None] = mapped_column(Integer, nullable=True)
     actual_cash_piasters: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cash_difference_piasters: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="OPEN", index=True)
 
-    employee: Mapped[User] = relationship()
+    employee: Mapped[User] = relationship(foreign_keys=[employee_id])
+    closed_by: Mapped[User | None] = relationship(foreign_keys=[closed_by_user_id])
     movements: Mapped[list["CashMovement"]] = relationship(back_populates="shift")
     invoices: Mapped[list["Invoice"]] = relationship(back_populates="shift")
 
@@ -185,11 +187,15 @@ class CashMovement(Base):
     movement_type: Mapped[str] = mapped_column(String(20))
     amount_piasters: Mapped[int] = mapped_column(Integer)
     reason: Mapped[str] = mapped_column(String(300))
+    approval_status: Mapped[str] = mapped_column(String(20), default="PENDING", index=True)
+    decided_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     correction_of_id: Mapped[int | None] = mapped_column(ForeignKey("cash_movements.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     shift: Mapped[Shift] = relationship(back_populates="movements")
     user: Mapped[User] = relationship(foreign_keys=[user_id])
+    decided_by: Mapped[User | None] = relationship(foreign_keys=[decided_by_user_id])
 
 
 class InvoiceSequence(Base):
