@@ -170,6 +170,9 @@ def require_cashier_shift(db: Session, user: User) -> Shift | None:
 def open_shift(db: Session, user: User, opening_cash_piasters: int, at: datetime | None = None) -> Shift:
     if active_shift_for_user(db, user.id):
         raise HTTPException(409, "User already has an open shift")
+    other_open = db.scalar(select(Shift.id).where(Shift.status == "OPEN").limit(1))
+    if other_open:
+        raise HTTPException(409, "Another cashier shift is already open for this drawer")
     if user.role == "STAFF" and int(opening_cash_piasters) != 0:
         raise HTTPException(403, "Staff shifts must start at zero; drawer opening cash is admin-controlled")
     at = at or now_utc()
@@ -304,6 +307,14 @@ def add_cash_movement(db: Session, shift: Shift, user: User, movement_type: str,
         raise HTTPException(409, "Shift is closed")
     if shift.employee_id != user.id and user.role not in ("ROOT", "ADMIN"):
         raise HTTPException(403, "Cannot modify another employee's shift")
+    if user.role == "STAFF" and movement_type != "CASH_OUT":
+        raise HTTPException(403, "Staff can only request cash-out expenses; cash-in is admin-controlled")
+    pending_count = db.scalar(select(func.count(CashMovement.id)).where(
+        CashMovement.shift_id == shift.id,
+        CashMovement.approval_status == "PENDING",
+    )) or 0
+    if int(pending_count) >= 20:
+        raise HTTPException(409, "Too many pending cash requests; admin review is required")
     movement = CashMovement(
         shift_id=shift.id,
         user_id=user.id,
