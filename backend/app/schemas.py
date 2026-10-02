@@ -161,7 +161,12 @@ class ShiftOpenRequest(BaseModel):
     opening_cash_piasters: int = Field(ge=0, le=100_000_000)
 
 
-class ShiftCloseRequest(BaseModel):
+class AdminApprovalCredentials(BaseModel):
+    admin_username: str = Field(min_length=1, max_length=80)
+    admin_password: str = Field(min_length=1, max_length=300)
+
+
+class ShiftCloseRequest(AdminApprovalCredentials):
     actual_cash_piasters: int = Field(ge=0, le=100_000_000)
 
 
@@ -169,6 +174,10 @@ class CashMovementCreate(BaseModel):
     movement_type: str = Field(pattern=r"^(CASH_IN|CASH_OUT)$")
     amount_piasters: int = Field(gt=0, le=100_000_000)
     reason: str = Field(min_length=2, max_length=300)
+
+
+class CashMovementDecisionRequest(AdminApprovalCredentials):
+    decision: str = Field(pattern=r"^(APPROVE|REJECT)$")
 
 
 class SessionOut(BaseModel):
