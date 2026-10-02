@@ -152,6 +152,37 @@ jobs:
 
               await page.reload({ waitUntil: 'domcontentloaded' });
               await page.getByText('وردية مفتوحة', { exact: true }).waitFor({ timeout: 15000 });
+
+              // A cashier cannot classify a received payment as InstaPay/Visa
+              // without an administrator re-authenticating in the invoice modal.
+              await page.getByRole('button', { name: 'بدء جلسة' }).first().click();
+              await page.getByRole('button', { name: 'تأكيد البدء' }).click();
+              await page.getByRole('button', { name: 'إنهاء الجلسة' }).first().waitFor({ timeout: 15000 });
+              await page.getByRole('button', { name: 'إنهاء الجلسة' }).first().click();
+              await page.getByLabel('طريقة الدفع').selectOption('INSTAPAY');
+              await page.getByText('الدفع غير النقدي يحتاج اعتماد مدير', { exact: true }).waitFor();
+
+              await page.locator('#noncash-admin-username').fill('admin');
+              await page.locator('#noncash-admin-password').fill('wrong-password');
+              await page.getByRole('button', { name: 'إنهاء وإصدار الفاتورة' }).click();
+              await page.waitForTimeout(600);
+              if (!(await page.getByText('الدفع غير النقدي يحتاج اعتماد مدير', { exact: true }).isVisible())) {
+                throw new Error('Wrong admin password allowed non-cash invoice finalization');
+              }
+
+              await page.locator('#noncash-admin-password').fill(ADMIN_PASSWORD);
+              await page.getByRole('button', { name: 'إنهاء وإصدار الفاتورة' }).click();
+              await page.getByRole('heading', { name: /فاتورة/ }).waitFor({ timeout: 15000 });
+              await page.locator('.modal-actions .button.ghost').last().click();
+
+              const afterNonCash = await page.evaluate(async () => {
+                const token = localStorage.getItem('playzone_token');
+                return fetch('/api/shifts/current', { headers: { Authorization: 'Bearer ' + token } }).then(r => r.json());
+              });
+              if (afterNonCash.expected_cash_piasters !== 5000) {
+                throw new Error('Approved non-cash invoice incorrectly changed drawer cash');
+              }
+
               await page.locator('button.shift-chip').click();
               await page.getByRole('heading', { name: 'إدارة الوردية' }).waitFor();
 
