@@ -1579,6 +1579,14 @@ def api_end(session_id: int, payload: PaymentRequest, user: User = Depends(ready
     enabled_methods = _payment_methods_config(db)["enabled"]
     if payload.payment_method not in enabled_methods:
         raise HTTPException(409, "PAYMENT_METHOD_DISABLED")
+    if user.role == "STAFF" and payload.payment_method != "CASH":
+        _admin_password_approval(
+            db,
+            admin_username=payload.admin_username or "",
+            admin_password=payload.admin_password or "",
+            requested_by=user,
+            purpose=f"non_cash_payment:{session.id}:{payload.payment_method}",
+        )
 
     # Finalize the financial record first. Display power is optional and must never
     # make an already-valid invoice/session finalization fail or roll back.
