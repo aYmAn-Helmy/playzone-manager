@@ -1,4 +1,4 @@
-﻿PlayZone Manager v0.31 - Remote Support Edition
+﻿PlayZone Manager v0.34 - Secure Cash Drawer + Remote Support
 ===============================================
 
 التشغيل المحلي
@@ -37,15 +37,22 @@ Remote Support
 
 البيانات
 --------
-C:\ProgramData\PlayZone Manager\playzone.db
-C:\ProgramData\PlayZone Manager\voltra.json
+C:\ProgramData\PlayZone Manager\secure-data\playzone.db
+C:\ProgramData\PlayZone Manager\secure-data\voltra.json
+C:\ProgramData\PlayZone Manager\secure-data\backups\
 C:\ProgramData\PlayZone Manager\logs\service.log
+
+مجلد secure-data محمي على Windows بحيث لا يستطيع Standard User قراءة أو تعديل
+قاعدة البيانات أو النسخ الاحتياطية مباشرة. الوصول متاح لـ LocalSystem وAdministrators فقط.
 
 مهم
 ----
 - إغلاق Edge لا يوقف الجلسات أو Voltra لأن المحرك يعمل كـ Windows Service.
 - ProgramData لا يتم حذفها عند Upgrade/Reinstall.
-- ROOT لا يعمل بدون كلمة مرور في v0.31.
+- ROOT لا يعمل بدون كلمة مرور.
+- مصروفات الموظف تظل PENDING حتى إدخال باسورد ADMIN/ROOT واعتمادها.
+- تصفية وإقفال الدرج تتطلب باسورد ADMIN/ROOT.
+- الدفع InstaPay/Visa من حساب STAFF يتطلب اعتماد ADMIN/ROOT لمنع إخفاء نقص الكاش.
 - عند فقد ROOT Password يمكن لمسؤول Windows المحلي تشغيل Setup-Root-Password.bat.
 
 
