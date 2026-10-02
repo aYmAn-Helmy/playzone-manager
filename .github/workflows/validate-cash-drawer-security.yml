@@ -73,7 +73,7 @@ jobs:
 
           from app.main import app
           from app.db import SessionLocal
-          from app.models import AuthToken, CashMovement, PlaySession, Shift, Station, User
+          from app.models import AuthToken, CashMovement, DrawerSettlement, PlaySession, Shift, ShiftHandoff, Station, User
           from app.activation import ACTIVATION_HASH_KEY, machine_hash, set_setting
           from app.security import hash_password
 
@@ -314,8 +314,7 @@ jobs:
               r = client.get(f"/api/shifts/{shift_id}", headers=hs)
               assert r.json()["expected_cash_piasters"] == 3800
 
-              # Any active session blocks close even if it was opened by ADMIN
-              # during this cashier's physical drawer shift.
+              # A live session must NOT block admin drawer settlement.
               with SessionLocal() as db:
                   admin_user = db.scalar(select(User).where(User.username == "admin"))
                   station = db.scalar(select(Station).order_by(Station.id))
@@ -332,22 +331,7 @@ jobs:
                   db.commit()
                   active_id = active.id
 
-              r = client.post(
-                  f"/api/shifts/{shift_id}/close",
-                  headers=hs,
-                  json={
-                      "actual_cash_piasters": 3800,
-                      "admin_username": "admin",
-                      "admin_password": ADMIN_PASSWORD,
-                  },
-              )
-              assert_status(r, 409, "admin-opened active session blocks close")
-              with SessionLocal() as db:
-                  active = db.get(PlaySession, active_id)
-                  db.delete(active)
-                  db.commit()
-
-              # Wrong password cannot close.
+              # Wrong password still cannot settle.
               r = client.post(
                   f"/api/shifts/{shift_id}/close",
                   headers=hs,
@@ -359,7 +343,7 @@ jobs:
               )
               assert_status(r, 403, "wrong password close blocked")
 
-              # Correct admin approval settles and closes the drawer.
+              # Correct admin approval settles even while the PlayStation session stays live.
               r = client.post(
                   f"/api/shifts/{shift_id}/close",
                   headers=hs,
@@ -369,13 +353,19 @@ jobs:
                       "admin_password": ADMIN_PASSWORD,
                   },
               )
-              assert_status(r, 200, "admin closes drawer")
+              assert_status(r, 200, "admin closes drawer with live session")
               closed = r.json()
               assert closed["status"] == "CLOSED"
               assert closed["cash_difference_piasters"] == 0
               assert closed["closed_by"] == "Administrator"
+              with SessionLocal() as db:
+                  assert db.get(PlaySession, active_id).status == "RUNNING"
+                  first_settlement = db.scalar(select(DrawerSettlement).where(DrawerSettlement.shift_id == shift_id))
+                  assert first_settlement is not None
+                  assert first_settlement.id == 1
+                  assert first_settlement.active_sessions_at_close == 1
 
-              # Staff current shift is now reset; next shift starts from zero.
+              # Staff current shift is reset, but the live session is untouched.
               r = client.get("/api/shifts/current", headers=hs)
               assert_status(r, 200, "current shift after close")
               assert r.json() is None
@@ -383,19 +373,71 @@ jobs:
               assert_status(r, 200, "admin sees no drawer shift after settlement")
               assert r.json() is None
 
-              # Even ADMIN cannot create financial sessions outside a drawer shift.
-              stations_after_close = client.get("/api/stations", headers=ha)
-              admin_station_after_close = stations_after_close.json()[2]["id"]
-              r = client.post(
-                  f"/api/stations/{admin_station_after_close}/sessions/start",
-                  headers=ha,
-                  json={"session_type": "OPEN", "duration_seconds": None, "controller_count": 2},
-              )
-              assert_status(r, 409, "admin off-shift sale blocked")
-
+              # The next employee can open the next drawer shift while the old session is still live.
               r = client.post("/api/shifts/open", headers=hs2, json={"opening_cash_piasters": 0})
-              assert_status(r, 200, "next employee shift opens after admin settlement")
+              assert_status(r, 200, "next employee shift opens with live session")
+              shift2_id = r.json()["id"]
               assert r.json()["expected_cash_piasters"] == 0
+
+              # Handoff requires the receiving employee's own password.
+              r = client.get(f"/api/shifts/{shift2_id}/handoff-candidates", headers=hs2)
+              assert_status(r, 200, "handoff candidates")
+              staff1 = next(row for row in r.json() if row["username"] == "cashier1")
+
+              r = client.post(
+                  f"/api/shifts/{shift2_id}/handoff",
+                  headers=hs2,
+                  json={"to_user_id": staff1["id"], "password": "wrong-password"},
+              )
+              assert_status(r, 401, "wrong receiving employee password blocked")
+
+              r = client.post(
+                  f"/api/shifts/{shift2_id}/handoff",
+                  headers=hs2,
+                  json={"to_user_id": staff1["id"], "password": STAFF_PASSWORD},
+              )
+              assert_status(r, 200, "authenticated employee handoff")
+              handoff = r.json()
+              new_staff1_token = handoff["token"]
+              hs_new = {"Authorization": f"Bearer {new_staff1_token}"}
+              assert handoff["username"] == "cashier1"
+              assert handoff["shift"]["employee"] == "Cashier One"
+
+              # Old cashier token was revoked; the newly authenticated employee owns the live shift.
+              old = client.get("/api/shifts/current", headers=hs2)
+              assert old.status_code in (401, 403)
+              r = client.get("/api/shifts/current", headers=hs_new)
+              assert_status(r, 200, "new cashier owns handed-off shift")
+              assert r.json()["id"] == shift2_id
+              assert r.json()["username"] == "cashier1"
+
+              # A second admin settlement creates the next immutable sequence number.
+              r = client.post(
+                  f"/api/shifts/{shift2_id}/close",
+                  headers=hs_new,
+                  json={
+                      "actual_cash_piasters": 0,
+                      "admin_username": "admin",
+                      "admin_password": ADMIN_PASSWORD,
+                  },
+              )
+              assert_status(r, 200, "second sequential settlement")
+
+              report = client.get("/api/reports/summary", headers=ha)
+              assert_status(report, 200, "settlement report")
+              data = report.json()
+              settlements = data["drawer_settlements"]
+              assert len(settlements) >= 2
+              assert settlements[0]["settlement_number"] == 2
+              assert settlements[1]["settlement_number"] == 1
+              assert settlements[0]["settled_at"]
+              assert settlements[0]["closed_by"] == "Administrator"
+              assert settlements[0]["active_sessions_at_close"] == 1
+              assert any(row["shift_id"] == shift2_id and row["to_username"] == "cashier1" for row in data["shift_handoffs"])
+
+              with SessionLocal() as db:
+                  assert db.scalar(select(ShiftHandoff).where(ShiftHandoff.shift_id == shift2_id)) is not None
+                  assert db.get(PlaySession, active_id).status == "RUNNING"
 
           print("CASH_DRAWER_SECURITY_OK")
           '@ | Set-Content backend\cash_drawer_security_test.py -Encoding UTF8
@@ -414,3 +456,6 @@ jobs:
           if (-not $js.Contains('تصفية وإقفال الوردية')) { throw 'Admin settlement wording missing.' }
           if (-not $js.Contains('الدفع غير النقدي يحتاج اعتماد مدير')) { throw 'Non-cash admin approval UI missing.' }
           if (-not $js.Contains('noncash-admin-password')) { throw 'Non-cash admin password field missing.' }
+          if (-not $js.Contains('تسليم الوردية لموظف آخر')) { throw 'Shift handoff UI missing.' }
+          if (-not $js.Contains('تسلسل تصفية الدرج وإقفال الورديات')) { throw 'Settlement sequence report UI missing.' }
+          if (-not $js.Contains('الجلسات المفتوحة تظل شغالة')) { throw 'Live-session settlement guidance missing.' }
