@@ -39,6 +39,7 @@ from .models import AuditLog, AuthToken, CashMovement, Invoice, PlaySession, Pro
 from .schemas import (
     AddItem,
     CashMovementCreate,
+    CashMovementDecisionRequest,
     ControllerCountUpdate,
     InvoiceOut,
     LoginRequest,
@@ -68,6 +69,7 @@ from .services import (
     active_session_for_station,
     active_shift_for_user,
     add_cash_movement,
+    decide_cash_movement,
     add_product,
     audit,
     close_shift,
@@ -275,6 +277,47 @@ def root_ready_user(user: User = Depends(ready_user)) -> User:
     if user.role != "ROOT":
         raise HTTPException(403, "Root role required")
     return user
+
+
+def _admin_password_approval(
+    db: Session,
+    *,
+    admin_username: str,
+    admin_password: str,
+    requested_by: User,
+    purpose: str,
+) -> User:
+    """Re-authenticate an active ADMIN/ROOT for a sensitive cash-drawer action."""
+    username = str(admin_username or "").strip()
+    admin = db.scalar(select(User).where(User.username == username))
+    valid = bool(
+        admin
+        and admin.is_active
+        and admin.role in ("ROOT", "ADMIN")
+        and not admin.must_change_password
+        and verify_password(admin_password, admin.password_hash)
+    )
+    if not valid:
+        audit(
+            db,
+            requested_by,
+            "ADMIN_APPROVAL_FAILED",
+            "cash_drawer",
+            None,
+            f"purpose={purpose};requested_admin={username[:80]}",
+        )
+        db.commit()
+        raise HTTPException(401, "Invalid admin approval credentials")
+    audit(
+        db,
+        admin,
+        "ADMIN_APPROVAL_GRANTED",
+        "cash_drawer",
+        None,
+        f"purpose={purpose};requested_by={requested_by.username}",
+    )
+    db.flush()
+    return admin
 
 
 @app.get("/api/root/tailscale/status")
@@ -1247,7 +1290,14 @@ def current_shift(user: User = Depends(ready_user), db: Session = Depends(get_db
 
 @app.post("/api/shifts/open")
 def api_open_shift(payload: ShiftOpenRequest, user: User = Depends(ready_user), db: Session = Depends(get_db)):
-    return shift_snapshot(db, open_shift(db, user, payload.opening_cash_piasters))
+    # Staff cannot invent a drawer opening balance. A cashier shift always starts
+    # from zero after the previous drawer was settled by an administrator.
+    opening_cash = int(payload.opening_cash_piasters)
+    if user.role == "STAFF" and opening_cash != 0:
+        audit(db, user, "SHIFT_OPENING_CASH_BLOCKED", "shift", None, f"attempted={opening_cash}")
+        db.commit()
+        raise HTTPException(403, "Staff shifts must start at zero after admin settlement")
+    return shift_snapshot(db, open_shift(db, user, opening_cash))
 
 
 @app.get("/api/shifts")
@@ -1264,8 +1314,19 @@ def shift_detail(shift_id: int, user: User = Depends(ready_user), db: Session = 
     if user.role not in ("ROOT", "ADMIN") and shift.employee_id != user.id:
         raise HTTPException(403, "Cannot access another employee's shift")
     result = shift_snapshot(db, shift)
-    result["movements"] = [{"id": m.id, "type": m.movement_type, "amount_piasters": m.amount_piasters,
-                            "reason": m.reason, "created_at": normalize_utc(m.created_at)} for m in shift.movements]
+    result["movements"] = [{
+        "id": m.id,
+        "type": m.movement_type,
+        "amount_piasters": m.amount_piasters,
+        "reason": m.reason,
+        "approval_status": m.approval_status,
+        "requested_by_user_id": m.user_id,
+        "requested_by": (m.user.display_name or m.user.username) if m.user else str(m.user_id),
+        "decided_by_user_id": m.decided_by_user_id,
+        "decided_by": ((m.decided_by.display_name or m.decided_by.username) if m.decided_by else None),
+        "decided_at": normalize_utc(m.decided_at) if m.decided_at else None,
+        "created_at": normalize_utc(m.created_at),
+    } for m in sorted(shift.movements, key=lambda row: row.id, reverse=True)]
     return result
 
 
@@ -1275,9 +1336,51 @@ def api_cash_movement(shift_id: int, payload: CashMovementCreate, user: User = D
     if not shift:
         raise HTTPException(404, "Shift not found")
     movement = add_cash_movement(db, shift, user, payload.movement_type, payload.amount_piasters, payload.reason)
-    return {"id": movement.id, "shift_id": movement.shift_id, "movement_type": movement.movement_type,
-            "amount_piasters": movement.amount_piasters, "reason": movement.reason,
-            "created_at": normalize_utc(movement.created_at)}
+    return {
+        "id": movement.id,
+        "shift_id": movement.shift_id,
+        "movement_type": movement.movement_type,
+        "amount_piasters": movement.amount_piasters,
+        "reason": movement.reason,
+        "approval_status": movement.approval_status,
+        "created_at": normalize_utc(movement.created_at),
+    }
+
+
+@app.post("/api/shifts/{shift_id}/movements/{movement_id}/decision")
+def api_cash_movement_decision(
+    shift_id: int,
+    movement_id: int,
+    payload: CashMovementDecisionRequest,
+    user: User = Depends(ready_user),
+    db: Session = Depends(get_db),
+):
+    shift = db.get(Shift, shift_id)
+    if not shift:
+        raise HTTPException(404, "Shift not found")
+    if user.role not in ("ROOT", "ADMIN") and shift.employee_id != user.id:
+        raise HTTPException(403, "Cannot access another employee's shift")
+    movement = db.get(CashMovement, movement_id)
+    if not movement or movement.shift_id != shift.id:
+        raise HTTPException(404, "Cash movement not found")
+    admin = _admin_password_approval(
+        db,
+        admin_username=payload.admin_username,
+        admin_password=payload.admin_password,
+        requested_by=user,
+        purpose=f"cash_movement:{payload.decision}:{movement.id}",
+    )
+    movement = decide_cash_movement(db, shift, movement, admin, payload.decision)
+    return {
+        "id": movement.id,
+        "shift_id": movement.shift_id,
+        "movement_type": movement.movement_type,
+        "amount_piasters": movement.amount_piasters,
+        "reason": movement.reason,
+        "approval_status": movement.approval_status,
+        "decided_by": admin.username,
+        "decided_at": normalize_utc(movement.decided_at),
+    }
 
 
 @app.post("/api/shifts/{shift_id}/close")
@@ -1285,11 +1388,26 @@ def api_close_shift(shift_id: int, payload: ShiftCloseRequest, user: User = Depe
     shift = db.get(Shift, shift_id)
     if not shift:
         raise HTTPException(404, "Shift not found")
-    if user.role not in ("ROOT", "ADMIN") and db.scalar(select(PlaySession).where(
-        PlaySession.opened_by_user_id == user.id, PlaySession.status.in_(["RUNNING", "PAUSED", "EXPIRED"])
-    )):
-        raise HTTPException(409, "Cannot close shift while sessions opened by this employee are active")
-    return shift_snapshot(db, close_shift(db, shift, user, payload.actual_cash_piasters))
+    if user.role not in ("ROOT", "ADMIN") and shift.employee_id != user.id:
+        raise HTTPException(403, "Cannot close another employee's shift")
+    admin = _admin_password_approval(
+        db,
+        admin_username=payload.admin_username,
+        admin_password=payload.admin_password,
+        requested_by=user,
+        purpose=f"close_shift:{shift.id}",
+    )
+    closed = close_shift(db, shift, admin, payload.actual_cash_piasters)
+    audit(
+        db,
+        admin,
+        "DRAWER_SETTLED",
+        "shift",
+        shift.id,
+        f"cashier={shift.employee_id};requested_by={user.id};actual={payload.actual_cash_piasters}",
+    )
+    db.commit()
+    return shift_snapshot(db, closed)
 
 
 # ---- Sessions / invoices -------------------------------------------------
