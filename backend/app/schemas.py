@@ -182,6 +182,11 @@ class CashMovementDecisionRequest(AdminApprovalCredentials):
     decision: str = Field(pattern=r"^(APPROVE|REJECT)$")
 
 
+class ShiftHandoffRequest(BaseModel):
+    to_user_id: int = Field(gt=0)
+    password: str = Field(min_length=1, max_length=300)
+
+
 class SessionOut(BaseModel):
     id: int
     status: str
