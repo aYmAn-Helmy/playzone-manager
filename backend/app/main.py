@@ -67,6 +67,7 @@ from .schemas import (
 from .security import hash_password, needs_password_rehash, new_token, token_expiry, token_hash, verify_password
 from .services import (
     active_session_for_station,
+    active_drawer_shift,
     active_shift_for_user,
     add_cash_movement,
     decide_cash_movement,
@@ -1339,7 +1340,9 @@ def stop_timed_session_monitor() -> None:
 
 @app.get("/api/shifts/current")
 def current_shift(user: User = Depends(ready_user), db: Session = Depends(get_db)):
-    shift = active_shift_for_user(db, user.id)
+    # STAFF sees only their own shift. ADMIN/ROOT sees the one physical drawer
+    # shift so a manager can settle it even after the cashier logs out.
+    shift = active_drawer_shift(db) if user.role in ("ROOT", "ADMIN") else active_shift_for_user(db, user.id)
     return shift_snapshot(db, shift) if shift else None
 
 
