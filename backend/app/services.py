@@ -151,18 +151,25 @@ def active_shift_for_user(db: Session, user_id: int) -> Shift | None:
     )
 
 
-def require_cashier_shift(db: Session, user: User) -> Shift | None:
-    """Require an open shift for staff when production shift enforcement is enabled.
+def active_drawer_shift(db: Session) -> Shift | None:
+    return db.scalar(
+        select(Shift)
+        .where(Shift.status == "OPEN")
+        .order_by(Shift.id.desc())
+        .limit(1)
+    )
 
-    Existing Milestone 1/2 databases and isolated legacy tests that do not contain the
-    `shift_required` setting retain backward compatibility. Normal application startup
-    seeds the setting as enabled.
+
+def require_cashier_shift(db: Session, user: User) -> Shift | None:
+    """Attach every financial operation to the one physical drawer shift.
+
+    Legacy/test databases without shift_required retain backward compatibility.
+    In production, STAFF must own the open shift; ADMIN/ROOT may operate the open
+    drawer shift for supervision but cannot create off-shift sales.
     """
-    if user.role in ("ROOT", "ADMIN"):
-        return active_shift_for_user(db, user.id)
     if get_setting_int(db, "shift_required", 0) != 1:
         return active_shift_for_user(db, user.id)
-    shift = active_shift_for_user(db, user.id)
+    shift = active_drawer_shift(db) if user.role in ("ROOT", "ADMIN") else active_shift_for_user(db, user.id)
     if not shift:
         raise HTTPException(409, "An open cashier shift is required")
     return shift
