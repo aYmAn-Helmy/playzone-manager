@@ -105,6 +105,7 @@ from .tailscale_support import (
 CAIRO = ZoneInfo("Africa/Cairo")
 
 _AUTH_GUARD_LOCK = threading.Lock()
+_CASH_DRAWER_LOCK = threading.RLock()
 _AUTH_FAILURES: dict[str, list[float]] = {}
 _AUTH_BLOCKED_UNTIL: dict[str, float] = {}
 _AUTH_WINDOW_SECONDS = 120.0
@@ -1403,59 +1404,72 @@ def api_cash_movement_decision(
     user: User = Depends(ready_user),
     db: Session = Depends(get_db),
 ):
-    shift = db.get(Shift, shift_id)
-    if not shift:
-        raise HTTPException(404, "Shift not found")
-    if user.role not in ("ROOT", "ADMIN") and shift.employee_id != user.id:
-        raise HTTPException(403, "Cannot access another employee's shift")
-    movement = db.get(CashMovement, movement_id)
-    if not movement or movement.shift_id != shift.id:
-        raise HTTPException(404, "Cash movement not found")
-    admin = _admin_password_approval(
-        db,
-        admin_username=payload.admin_username,
-        admin_password=payload.admin_password,
-        requested_by=user,
-        purpose=f"cash_movement:{payload.decision}:{movement.id}",
-    )
-    movement = decide_cash_movement(db, shift, movement, admin, payload.decision)
-    return {
-        "id": movement.id,
-        "shift_id": movement.shift_id,
-        "movement_type": movement.movement_type,
-        "amount_piasters": movement.amount_piasters,
-        "reason": movement.reason,
-        "approval_status": movement.approval_status,
-        "decided_by": admin.username,
-        "decided_at": normalize_utc(movement.decided_at),
-    }
+    requester_id = user.id
+    requester_role = user.role
+    with _CASH_DRAWER_LOCK:
+        # Authentication dependencies already performed reads on this Session.
+        # End that read transaction so approval checks see the latest committed
+        # drawer balance after waiting for any previous approval to finish.
+        db.rollback()
+        requester = db.get(User, requester_id)
+        shift = db.get(Shift, shift_id)
+        if not shift:
+            raise HTTPException(404, "Shift not found")
+        if requester_role not in ("ROOT", "ADMIN") and shift.employee_id != requester_id:
+            raise HTTPException(403, "Cannot access another employee's shift")
+        movement = db.get(CashMovement, movement_id)
+        if not movement or movement.shift_id != shift.id:
+            raise HTTPException(404, "Cash movement not found")
+        admin = _admin_password_approval(
+            db,
+            admin_username=payload.admin_username,
+            admin_password=payload.admin_password,
+            requested_by=requester,
+            purpose=f"cash_movement:{payload.decision}:{movement.id}",
+        )
+        movement = decide_cash_movement(db, shift, movement, admin, payload.decision)
+        return {
+            "id": movement.id,
+            "shift_id": movement.shift_id,
+            "movement_type": movement.movement_type,
+            "amount_piasters": movement.amount_piasters,
+            "reason": movement.reason,
+            "approval_status": movement.approval_status,
+            "decided_by": admin.username,
+            "decided_at": normalize_utc(movement.decided_at),
+        }
 
 
 @app.post("/api/shifts/{shift_id}/close")
 def api_close_shift(shift_id: int, payload: ShiftCloseRequest, user: User = Depends(ready_user), db: Session = Depends(get_db)):
-    shift = db.get(Shift, shift_id)
-    if not shift:
-        raise HTTPException(404, "Shift not found")
-    if user.role not in ("ROOT", "ADMIN") and shift.employee_id != user.id:
-        raise HTTPException(403, "Cannot close another employee's shift")
-    admin = _admin_password_approval(
-        db,
-        admin_username=payload.admin_username,
-        admin_password=payload.admin_password,
-        requested_by=user,
-        purpose=f"close_shift:{shift.id}",
-    )
-    closed = close_shift(db, shift, admin, payload.actual_cash_piasters)
-    audit(
-        db,
-        admin,
-        "DRAWER_SETTLED",
-        "shift",
-        shift.id,
-        f"cashier={shift.employee_id};requested_by={user.id};actual={payload.actual_cash_piasters}",
-    )
-    db.commit()
-    return shift_snapshot(db, closed)
+    requester_id = user.id
+    requester_role = user.role
+    with _CASH_DRAWER_LOCK:
+        db.rollback()
+        requester = db.get(User, requester_id)
+        shift = db.get(Shift, shift_id)
+        if not shift:
+            raise HTTPException(404, "Shift not found")
+        if requester_role not in ("ROOT", "ADMIN") and shift.employee_id != requester_id:
+            raise HTTPException(403, "Cannot close another employee's shift")
+        admin = _admin_password_approval(
+            db,
+            admin_username=payload.admin_username,
+            admin_password=payload.admin_password,
+            requested_by=requester,
+            purpose=f"close_shift:{shift.id}",
+        )
+        closed = close_shift(db, shift, admin, payload.actual_cash_piasters)
+        audit(
+            db,
+            admin,
+            "DRAWER_SETTLED",
+            "shift",
+            shift.id,
+            f"cashier={shift.employee_id};requested_by={requester_id};actual={payload.actual_cash_piasters}",
+        )
+        db.commit()
+        return shift_snapshot(db, closed)
 
 
 # ---- Sessions / invoices -------------------------------------------------
