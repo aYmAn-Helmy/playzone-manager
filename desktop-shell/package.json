@@ -1,7 +1,7 @@
 {
   "name": "playzone-manager-desktop",
   "productName": "PlayZone Manager",
-  "version": "0.33.2",
+  "version": "0.34.0",
   "private": true,
   "main": "main.js"
 }
