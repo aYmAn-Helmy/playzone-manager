@@ -1,0 +1,224 @@
+name: E2E Secure Drawer UI
+
+on:
+  push:
+    branches:
+      - security/admin-cash-drawer-approval
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PLAYZONE_DB_PATH: /tmp/playzone-drawer-ui.db
+      VOLTRA_DEMO: "1"
+      VOLTRA_HTTP_PORT: "28086"
+      VOLTRA_TCP_PORT: "28087"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install backend
+        run: python -m pip install -r backend/requirements.txt
+
+      - name: Start backend
+        run: |
+          cd backend
+          nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/playzone.log 2>&1 &
+          echo $! > /tmp/playzone.pid
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:8000/api/health >/dev/null; then exit 0; fi
+            sleep 0.5
+          done
+          cat /tmp/playzone.log
+          exit 1
+
+      - name: Seed secure test users and activation
+        run: |
+          cat > backend/prepare_drawer_ui.py <<'PY'
+          from sqlalchemy import select
+          from app.db import SessionLocal
+          from app.models import User
+          from app.activation import ACTIVATION_HASH_KEY, machine_hash, set_setting
+          from app.security import hash_password
+
+          ADMIN_PASSWORD = "Admin-Secure-Password-123!"
+          STAFF_PASSWORD = "Staff-Secure-Password-123!"
+
+          with SessionLocal() as db:
+              set_setting(db, ACTIVATION_HASH_KEY, machine_hash())
+              admin = db.scalar(select(User).where(User.username == "admin"))
+              assert admin is not None
+              admin.password_hash = hash_password(ADMIN_PASSWORD)
+              admin.must_change_password = False
+              admin.is_active = True
+
+              staff = db.scalar(select(User).where(User.username == "cashier-ui"))
+              if staff is None:
+                  staff = User(
+                      username="cashier-ui",
+                      display_name="Cashier UI",
+                      password_hash=hash_password(STAFF_PASSWORD),
+                      role="STAFF",
+                      must_change_password=False,
+                      is_active=True,
+                  )
+                  db.add(staff)
+              else:
+                  staff.password_hash = hash_password(STAFF_PASSWORD)
+                  staff.must_change_password = False
+                  staff.is_active = True
+              db.commit()
+          PY
+          cd backend
+          python prepare_drawer_ui.py
+
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Exercise real shift expense approval and close UI
+        run: |
+          cat > drawer-ui-e2e.cjs <<'NODE'
+          const { chromium } = require('playwright');
+
+          const ADMIN_PASSWORD = 'Admin-Secure-Password-123!';
+          const STAFF_PASSWORD = 'Staff-Secure-Password-123!';
+
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+
+            try {
+              await page.goto('http://127.0.0.1:8000', { waitUntil: 'domcontentloaded' });
+
+              await page.getByLabel('اسم المستخدم').fill('cashier-ui');
+              await page.getByLabel('كلمة المرور').fill(STAFF_PASSWORD);
+              await page.getByRole('button', { name: 'دخول' }).click();
+              await page.locator('button.shift-chip').waitFor({ state: 'visible', timeout: 15000 });
+
+              await page.locator('button.shift-chip').click();
+              await page.getByRole('heading', { name: 'فتح وردية' }).waitFor();
+              const numberInputs = await page.locator('.modal input[type="number"]').count();
+              if (numberInputs !== 0) throw new Error('Staff can still edit opening drawer cash in the UI');
+              await page.getByRole('button', { name: 'فتح الوردية', exact: true }).click();
+              await page.getByText('وردية مفتوحة', { exact: true }).waitFor({ timeout: 15000 });
+
+              // Seed an approved 50 EGP cash float through the protected admin path,
+              // so the real UI can then approve a 12 EGP staff expense.
+              const seeded = await page.evaluate(async ({ adminPassword }) => {
+                const staffToken = localStorage.getItem('playzone_token');
+                const auth = token => ({ Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' });
+                const current = await fetch('/api/shifts/current', { headers: auth(staffToken) }).then(r => r.json());
+
+                const adminLogin = await fetch('/api/auth/login', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ username: 'admin', password: adminPassword }),
+                });
+                if (!adminLogin.ok) throw new Error('Admin login failed while seeding UI test');
+                const adminToken = (await adminLogin.json()).token;
+
+                const req = await fetch('/api/shifts/' + current.id + '/movements', {
+                  method: 'POST',
+                  headers: auth(adminToken),
+                  body: JSON.stringify({
+                    movement_type: 'CASH_IN',
+                    amount_piasters: 5000,
+                    reason: 'E2E drawer float',
+                  }),
+                });
+                if (!req.ok) throw new Error('Cash-in request failed: ' + await req.text());
+                const movement = await req.json();
+
+                const approval = await fetch('/api/shifts/' + current.id + '/movements/' + movement.id + '/decision', {
+                  method: 'POST',
+                  headers: auth(adminToken),
+                  body: JSON.stringify({
+                    decision: 'APPROVE',
+                    admin_username: 'admin',
+                    admin_password: adminPassword,
+                  }),
+                });
+                if (!approval.ok) throw new Error('Cash-in approval failed: ' + await approval.text());
+                return current.id;
+              }, { adminPassword: ADMIN_PASSWORD });
+
+              await page.reload({ waitUntil: 'domcontentloaded' });
+              await page.getByText('وردية مفتوحة', { exact: true }).waitFor({ timeout: 15000 });
+              await page.locator('button.shift-chip').click();
+              await page.getByRole('heading', { name: 'إدارة الوردية' }).waitFor();
+
+              await page.getByLabel('المبلغ (ج.م)').fill('12');
+              await page.getByLabel('السبب').fill('مستلزمات اختبار');
+              await page.getByRole('button', { name: 'إرسال طلب للمراجعة' }).click();
+
+              await page.getByText('طلبات نقدية معلقة', { exact: true }).waitFor({ timeout: 15000 });
+              const pendingBefore = await page.evaluate(async () => {
+                const token = localStorage.getItem('playzone_token');
+                return fetch('/api/shifts/current', { headers: { Authorization: 'Bearer ' + token } }).then(r => r.json());
+              });
+              if (pendingBefore.expected_cash_piasters !== 5000 || pendingBefore.pending_cash_out_piasters !== 1200) {
+                throw new Error('Pending expense changed drawer cash before approval: ' + JSON.stringify(pendingBefore));
+              }
+
+              // A wrong password must not approve the request.
+              await page.getByLabel('اسم مستخدم المدير').fill('admin');
+              await page.getByLabel('باسورد المدير').fill('wrong-password');
+              await page.getByRole('button', { name: 'اعتماد', exact: true }).click();
+              await page.waitForTimeout(700);
+              const afterWrong = await page.evaluate(async () => {
+                const token = localStorage.getItem('playzone_token');
+                return fetch('/api/shifts/current', { headers: { Authorization: 'Bearer ' + token } }).then(r => r.json());
+              });
+              if (afterWrong.expected_cash_piasters !== 5000 || afterWrong.pending_cash_out_piasters !== 1200) {
+                throw new Error('Wrong admin password changed drawer state');
+              }
+
+              // Correct password approves the expense and only now reduces expected cash.
+              await page.getByLabel('باسورد المدير').fill(ADMIN_PASSWORD);
+              await page.getByRole('button', { name: 'اعتماد', exact: true }).click();
+              await page.getByText('طلبات نقدية معلقة', { exact: true }).waitFor({ state: 'detached', timeout: 15000 });
+
+              const afterApprove = await page.evaluate(async () => {
+                const token = localStorage.getItem('playzone_token');
+                return fetch('/api/shifts/current', { headers: { Authorization: 'Bearer ' + token } }).then(r => r.json());
+              });
+              if (afterApprove.expected_cash_piasters !== 3800 || afterApprove.pending_cash_out_piasters !== 0) {
+                throw new Error('Approved expense did not settle correctly: ' + JSON.stringify(afterApprove));
+              }
+
+              await page.getByRole('button', { name: 'تصفية وإقفال الوردية' }).click();
+              await page.getByRole('heading', { name: 'تصفية وإقفال الوردية' }).waitFor();
+              await page.getByLabel('العد الفعلي للنقد (ج.م)').fill('38');
+              await page.getByLabel('اسم مستخدم المدير').fill('admin');
+              await page.getByLabel('باسورد المدير').fill(ADMIN_PASSWORD);
+              await page.getByRole('button', { name: 'اعتماد المدير وإقفال الوردية' }).click();
+
+              await page.getByText('فتح وردية', { exact: true }).first().waitFor({ timeout: 15000 });
+              const currentAfterClose = await page.evaluate(async () => {
+                const token = localStorage.getItem('playzone_token');
+                return fetch('/api/shifts/current', { headers: { Authorization: 'Bearer ' + token } }).then(r => r.json());
+              });
+              if (currentAfterClose !== null) throw new Error('Shift was not reset after admin settlement');
+
+              console.log('SECURE_DRAWER_UI_E2E_OK shift=' + seeded);
+            } finally {
+              await browser.close();
+            }
+          })().catch(err => {
+            console.error(err);
+            process.exit(1);
+          });
+          NODE
+          node drawer-ui-e2e.cjs
+
+      - name: Backend log on failure
+        if: failure()
+        run: cat /tmp/playzone.log || true
