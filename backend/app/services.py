@@ -387,8 +387,8 @@ def handoff_shift(db: Session, shift: Shift, outgoing: User, incoming: User, at:
         shift.id,
         f"from={previous_employee_id};to={incoming.id};handoff_id={event.id}",
     )
-    db.commit()
-    db.refresh(event)
+    # Caller commits the ownership change together with the new login token so
+    # the handoff is all-or-nothing from the workstation's point of view.
     return event
 
 def add_cash_movement(db: Session, shift: Shift, user: User, movement_type: str, amount_piasters: int, reason: str) -> CashMovement:
