@@ -28,8 +28,41 @@ jobs:
       - name: Syntax checks
         shell: pwsh
         run: |
-          python -m py_compile backend/app/main.py backend/app/services.py backend/app/models.py backend/app/schemas.py backend/app/db.py
+          python -m py_compile backend/app/main.py backend/app/services.py backend/app/models.py backend/app/schemas.py backend/app/db.py backend/app/windows_service.py
           node --check frontend/dist/assets/index-v031.js
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile('Install-PlayZone-Service.ps1',[ref]$tokens,[ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { throw "Installer PowerShell syntax error: $($errors[0].Message)" }
+          [System.Management.Automation.Language.Parser]::ParseFile('Setup-Root-Password.ps1',[ref]$tokens,[ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { throw "ROOT setup PowerShell syntax error: $($errors[0].Message)" }
+
+      - name: Validate secure-data ACL recipe
+        shell: pwsh
+        run: |
+          $secure = Join-Path $env:RUNNER_TEMP 'playzone-secure-data-acl-test'
+          Remove-Item -LiteralPath $secure -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $secure | Out-Null
+          Set-Content -LiteralPath (Join-Path $secure 'playzone.db') -Value 'test'
+          New-Item -ItemType Directory -Force -Path (Join-Path $secure 'backups') | Out-Null
+          Set-Content -LiteralPath (Join-Path $secure 'backups\backup.db') -Value 'test'
+
+          & icacls.exe $secure /inheritance:r /Q | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Could not disable ACL inheritance in test.' }
+          & icacls.exe $secure /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' /Q | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Could not grant protected ACLs in test.' }
+          Get-ChildItem -LiteralPath $secure -Force | ForEach-Object {
+            & icacls.exe $_.FullName /reset /T /C /Q | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Could not reset child ACL: $($_.FullName)" }
+          }
+
+          $aclText = (& icacls.exe $secure) -join "`n"
+          if ($aclText -match 'BUILTIN\\Users|Authenticated Users|Everyone') {
+            throw "Standard-user ACL leaked into secure-data: $aclText"
+          }
+          if ($aclText -notmatch 'SYSTEM' -or $aclText -notmatch 'Administrators') {
+            throw "SYSTEM/Administrators ACL missing: $aclText"
+          }
 
       - name: Run drawer security integration test
         shell: pwsh
