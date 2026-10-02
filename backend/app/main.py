@@ -104,6 +104,45 @@ from .tailscale_support import (
 
 CAIRO = ZoneInfo("Africa/Cairo")
 
+_AUTH_GUARD_LOCK = threading.Lock()
+_AUTH_FAILURES: dict[str, list[float]] = {}
+_AUTH_BLOCKED_UNTIL: dict[str, float] = {}
+_AUTH_WINDOW_SECONDS = 120.0
+_AUTH_MAX_FAILURES = 8
+_AUTH_BLOCK_SECONDS = 300.0
+
+
+def _check_auth_rate_limit(key: str) -> None:
+    now = time_module.monotonic()
+    with _AUTH_GUARD_LOCK:
+        blocked_until = _AUTH_BLOCKED_UNTIL.get(key, 0.0)
+        if blocked_until > now:
+            retry = max(1, int(blocked_until - now))
+            raise HTTPException(429, f"Too many failed authentication attempts; retry in {retry} seconds")
+        recent = [t for t in _AUTH_FAILURES.get(key, []) if now - t <= _AUTH_WINDOW_SECONDS]
+        if recent:
+            _AUTH_FAILURES[key] = recent
+        else:
+            _AUTH_FAILURES.pop(key, None)
+
+
+def _record_auth_failure(key: str) -> None:
+    now = time_module.monotonic()
+    with _AUTH_GUARD_LOCK:
+        recent = [t for t in _AUTH_FAILURES.get(key, []) if now - t <= _AUTH_WINDOW_SECONDS]
+        recent.append(now)
+        _AUTH_FAILURES[key] = recent
+        if len(recent) >= _AUTH_MAX_FAILURES:
+            _AUTH_BLOCKED_UNTIL[key] = now + _AUTH_BLOCK_SECONDS
+            _AUTH_FAILURES.pop(key, None)
+
+
+def _clear_auth_failures(key: str) -> None:
+    with _AUTH_GUARD_LOCK:
+        _AUTH_FAILURES.pop(key, None)
+        _AUTH_BLOCKED_UNTIL.pop(key, None)
+
+
 # ROOT-controlled customer UI profile. These switches only change what is
 # presented in the client UI; backend permissions and financial rules stay
 # unchanged so hiding a control can never weaken security or corrupt billing.
@@ -289,6 +328,8 @@ def _admin_password_approval(
 ) -> User:
     """Re-authenticate an active ADMIN/ROOT for a sensitive cash-drawer action."""
     username = str(admin_username or "").strip()
+    auth_key = f"approval:{requested_by.id}:{username.lower()}"
+    _check_auth_rate_limit(auth_key)
     admin = db.scalar(select(User).where(User.username == username))
     valid = bool(
         admin
@@ -298,6 +339,7 @@ def _admin_password_approval(
         and verify_password(admin_password, admin.password_hash)
     )
     if not valid:
+        _record_auth_failure(auth_key)
         audit(
             db,
             requested_by,
@@ -308,6 +350,7 @@ def _admin_password_approval(
         )
         db.commit()
         raise HTTPException(401, "Invalid admin approval credentials")
+    _clear_auth_failures(auth_key)
     audit(
         db,
         admin,
@@ -405,15 +448,20 @@ def api_deactivate(actor: User = Depends(root_user), db: Session = Depends(get_d
 
 @app.post("/api/auth/login", response_model=LoginResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
+    auth_key = f"login:{str(payload.username).strip().lower()}"
+    _check_auth_rate_limit(auth_key)
     user = db.scalar(select(User).where(User.username == payload.username))
     if not user or not user.is_active:
+        _record_auth_failure(auth_key)
         raise HTTPException(401, "Invalid credentials")
     if not is_activated(db) and user.role != "ROOT":
         raise HTTPException(403, "PROGRAM_NOT_ACTIVATED")
 
     privileged_passwordless = user.role == "ADMIN" and passwordless_privileged_enabled(db)
     if not privileged_passwordless and not verify_password(payload.password, user.password_hash):
+        _record_auth_failure(auth_key)
         raise HTTPException(401, "Invalid credentials")
+    _clear_auth_failures(auth_key)
     if not privileged_passwordless and needs_password_rehash(user.password_hash):
         user.password_hash = hash_password(payload.password)
 
