@@ -96,6 +96,11 @@ def migrate_existing_database() -> None:
         connection.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_play_sessions_status_type ON play_sessions(status, session_type)")
         if connection.exec_driver_sql("SELECT 1 FROM sqlite_master WHERE type='table' AND name='shifts'").first():
             connection.exec_driver_sql("CREATE UNIQUE INDEX IF NOT EXISTS uq_open_employee_shift ON shifts(employee_id) WHERE status='OPEN'")
+            open_count = int(connection.exec_driver_sql("SELECT COUNT(*) FROM shifts WHERE status='OPEN'").scalar_one() or 0)
+            if open_count <= 1:
+                # One physical cash drawer = one OPEN shift globally. This database
+                # constraint closes the race where two employees submit OPEN at once.
+                connection.exec_driver_sql("CREATE UNIQUE INDEX IF NOT EXISTS uq_single_open_cash_drawer ON shifts(status) WHERE status='OPEN'")
         if connection.exec_driver_sql("SELECT 1 FROM sqlite_master WHERE type='table' AND name='cash_movements'").first():
             connection.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_cash_movements_shift_approval ON cash_movements(shift_id, approval_status)")
 
