@@ -1,4 +1,4 @@
-PlayZone Manager v0.34.1 — Secure Cash Drawer
+PlayZone Manager v0.34.2 — Secure Cash Drawer
 ================================================
 
 - الموظف يفتح وردية واحدة فقط للدرج وتبدأ برصيد نظامي صفر.
@@ -31,6 +31,14 @@ PlayZone Manager v0.34.1 — Secure Cash Drawer
 - Windows Service يعيد التحقق من ACL عند كل تشغيل.
 - desktop-profile والكاش يظلان خارج secure-data حتى يعمل تطبيق PlayZone للمستخدم العادي.
 - إذا وجد الـInstaller قاعدة legacy وقاعدة secure في نفس الوقت فإنه يوقف التثبيت بدلاً من اختيار قاعدة عشوائياً.
+
+إصلاحات Client Final v0.34.2
+----------------------------
+- إصلاح حزمة الـOffline Runtime التي كانت تحذف typing_inspection من الباكدج النهائية بسبب فلتر تنظيف واسع.
+- إضافة فحص مبكر داخل Bootstrap-Portable.ps1 للتأكد من وجود الـwheels الحرجة قبل بدء تثبيت Python.
+- إضافة Uninstall-PlayZone-Service.bat واضح للعميل مع طلب صلاحيات Administrator تلقائياً.
+- الـInstaller ينسخ ملفات الـUninstall إلى C:\Program Files\PlayZone Manager أثناء التثبيت.
+- Build العميل النهائي يختبر تثبيت Python فعلياً من الـpackage المنظفة باستخدام --no-index قبل إنشاء ملف ZIP.
 
 ملاحظات تشغيلية
 ---------------
