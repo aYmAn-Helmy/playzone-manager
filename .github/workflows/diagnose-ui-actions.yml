@@ -137,8 +137,11 @@ jobs:
             await page.waitForFunction(() => document.body.innerText.includes('إنهاء الجلسة'), null, { timeout: 15000 });
             console.log('START_WITH_SHIFT_OK');
 
-            // Users page.
-            await page.getByRole('button', { name: 'الموظفين', exact: true }).click();
+            // Users page. Reveal the desktop auto-hidden sidebar first.
+            await page.locator('.sidebar').hover();
+            const usersNav = page.getByRole('button', { name: 'الموظفين', exact: true });
+            await usersNav.evaluate(el => el.scrollIntoView({ block: 'center' }));
+            await usersNav.click();
             await page.getByRole('heading', { name: 'حسابات الموظفين' }).waitFor();
             const row = page.locator('tr', { hasText: 'staff-ui-test' });
             await row.waitFor();
