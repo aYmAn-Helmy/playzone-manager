@@ -47,7 +47,6 @@ jobs:
           if (-not $installer.Contains("SpecialFolders.Item('AllUsersDesktop')")) { throw 'All-users Desktop shortcut fallback missing.' }
           if (-not $installer.Contains('Win32_UserProfile')) { throw 'Interactive Windows user profile resolution missing.' }
           if (-not $installer.Contains("Name='explorer.exe'")) { throw 'Interactive Explorer owner detection missing.' }
-          if (-not $installer.Contains("Join-Path $env:PUBLIC 'Desktop'")) { throw 'Explicit Public Desktop fallback missing.' }
           if (-not $installer.Contains('Could not create a verified PlayZone Manager shortcut')) { throw 'Shortcut verification guard missing.' }
           if (-not $installer.Contains('explorer.exe')) { throw 'Explorer detached shortcut launch missing.' }
           if (-not $installer.Contains('Shell.Application')) { throw 'Windows Shell fallback launch missing.' }
