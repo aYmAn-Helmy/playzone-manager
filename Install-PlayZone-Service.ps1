@@ -1,4 +1,6 @@
 ﻿#Requires -RunAsAdministrator
+param([switch]$NonInteractive)
+
 $ErrorActionPreference = 'Stop'
 $SourceRoot = $PSScriptRoot
 $InstallRoot = Join-Path $env:ProgramFiles 'PlayZone Manager'
@@ -143,6 +145,9 @@ Step 'Securing ROOT account'
 & $Python -m app.root_setup status | Out-Host
 $rootStatus = $LASTEXITCODE
 if ($rootStatus -eq 3) {
+    if ($NonInteractive) {
+        Fail 'ROOT password setup is required before a non-interactive installation can continue.'
+    }
     Write-Host 'ROOT password setup is required for v0.34.4 Secure Cash Drawer Edition.' -ForegroundColor Yellow
     while ($true) {
         $secure1 = Read-Host 'Enter a new ROOT password (minimum 12 characters)' -AsSecureString
@@ -311,8 +316,10 @@ try {
 } catch { }
 if (-not $tcpOk) { Fail 'Voltra TCP 10086 is not listening. Check service.log before using the system.' }
 
-Step 'Opening PlayZone Manager Desktop'
-Start-Process -FilePath $DesktopExe -ArgumentList @('"' + $DesktopShell + '"') -WorkingDirectory $DesktopRuntime
+if (-not $NonInteractive) {
+    Step 'Opening PlayZone Manager Desktop'
+    Start-Process -FilePath $DesktopExe -ArgumentList @('"' + $DesktopShell + '"') -WorkingDirectory $DesktopRuntime
+}
 
 Write-Host ''
 Write-Host '===================================================' -ForegroundColor Green
@@ -327,4 +334,6 @@ Write-Host 'Cloud Sync  : DISABLED'
 Write-Host 'Internet    : Required once to download Electron unless its runtime ZIP is bundled; otherwise only for Tailscale remote support'
 Write-Host 'Remote setup: Run Setup-Tailscale-Support.bat as Administrator after Tailscale is installed'
 Write-Host ''
-Read-Host 'Press Enter to close'
+if (-not $NonInteractive) {
+    Read-Host 'Press Enter to close'
+}
