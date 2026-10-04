@@ -340,9 +340,9 @@ def reconnect() -> dict:
     if not status["supported"]:
         raise TailscaleSupportError("دعم Tailscale متاح في نسخة Windows المحلية فقط.")
     if not status["installed"]:
-        raise TailscaleSupportError("Tailscale غير مثبت. شغّل Setup-Tailscale-Support.bat مرة واحدة كمسؤول.")
+        raise TailscaleSupportError("مكوّن Remote Support غير مثبت. أعد تشغيل Install-nourxplay.bat كمسؤول.")
     if status["needs_login"]:
-        raise TailscaleSupportError("الجهاز غير مسجل في Tailnet. شغّل Setup-Tailscale-Support.bat مرة واحدة كمسؤول.")
+        raise TailscaleSupportError("الجهاز غير مربوط بالـTailnet. استخدم Auth Key من صفحة ROOT مرة واحدة.")
 
     exe = _find_tailscale()
     if not exe:
@@ -425,7 +425,11 @@ def ensure_always_on() -> dict:
     subprocess.run(["sc.exe", "start", "Tailscale"], capture_output=True, creationflags=_creation_flags())
 
     status = get_status()
-    if status.get("installed") and not status.get("connected") and not status.get("needs_login"):
+    if (
+        status.get("installed")
+        and not status.get("needs_login")
+        and (not status.get("connected") or not status.get("always_on"))
+    ):
         try:
             status = reconnect()
         except TailscaleSupportError:
