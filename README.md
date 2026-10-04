@@ -1,14 +1,14 @@
-# PlayZone Manager
+# nourxplay
 
-Current Windows client baseline: **v0.34.7 Secure Cash Drawer + Always-On Remote Support + Desktop Edition**.
+Current Windows client baseline: **v0.35.0 White Label + Always-On Remote Support + Desktop Edition**.
 
-PlayZone Manager is the cashier/session-management application with embedded Voltra screen-power management and ROOT-only remote support.
+nourxplay is the cashier/session-management application with embedded Voltra screen-power management and ROOT-only remote support.
 
 ## v0.34 highlights
 
-- Keeps the original **PlayZone Manager** product name and branding.
+- Keeps the original **nourxplay** product name and branding.
 - Adds a self-contained Electron/Chromium desktop client instead of depending on Microsoft Edge or Chrome.
-- The local PlayZone backend remains bound to `127.0.0.1:8000`.
+- The local nourxplay backend remains bound to `127.0.0.1:8000`.
 - Adds a responsive UI for desktop, tablet, and mobile screens.
 - Desktop keeps an auto-hide sidebar; tablet/mobile use a touch drawer.
 - Station grids, tables, forms, and modals adapt for smaller touch screens.
@@ -16,7 +16,7 @@ PlayZone Manager is the cashier/session-management application with embedded Vol
 - System Logs are available as a separate **ROOT-only** page.
 - ROOT password remains mandatory.
 - Remote support remains available through Tailscale Serve.
-- The PlayZone Windows Service automatically restores Tailscale and private HTTPS Serve if either stops or Serve is cleared.
+- The nourxplay Windows Service automatically restores Tailscale and private HTTPS Serve if either stops or Serve is cleared.
 - The verified offline Python runtime and dependency wheels are included under `offline-runtime/`.
 - Cash-drawer settlement is admin-password protected; staff expenses remain pending until an ADMIN/ROOT approves or rejects them.
 - Drawer settlement can occur while PlayStation sessions remain active; those sessions continue and are billed into the shift that is open when payment is finalized.
@@ -54,7 +54,7 @@ The installer uses Electron 44.4.5 for the embedded Chromium desktop client. It 
 ## Remote support design
 
 ```text
-PlayZone backend
+nourxplay backend
 127.0.0.1:8000
       |
       v
@@ -68,4 +68,4 @@ The application backend is intentionally not exposed on `0.0.0.0:8000`.
 
 ## Railway / historical staging files
 
-The repository still contains earlier Railway/staging support files and historical runtime patches for compatibility and reference. The Windows client source under `backend/` and `frontend/` is now at **v0.34.7**.
+The repository still contains earlier Railway/staging support files and historical runtime patches for compatibility and reference. The Windows client source under `backend/` and `frontend/` is now at **v0.35.0**.
