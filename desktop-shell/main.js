@@ -4,7 +4,7 @@ const http = require('http');
 
 const BASE_URL = 'http://127.0.0.1:8000';
 const HEALTH_URL = `${BASE_URL}/api/health`;
-const APP_URL = `${BASE_URL}/?desktop=playzone-v033`;
+const APP_URL = `${BASE_URL}/?desktop=playzone-v0344`;
 const ALLOWED_ORIGIN = new URL(BASE_URL).origin;
 let mainWindow = null;
 let loading = false;
