@@ -23,7 +23,7 @@ function Get-Sha256Hex([string]$Path) {
     }
 }
 
-Write-Host 'PlayZone Manager v0.34.6 - Secure Cash Drawer Edition' -ForegroundColor Green
+Write-Host 'PlayZone Manager v0.34.7 - Secure Cash Drawer Edition' -ForegroundColor Green
 Write-Host 'Local backend + private Tailscale Serve support. Cloud Sync is disabled.'
 Write-Host 'Python is bundled offline. The installer downloads and verifies the official Electron/Chromium desktop runtime once if it is not bundled beside the installer.'
 
@@ -160,7 +160,7 @@ if ($rootStatus -eq 3) {
     if ($NonInteractive) {
         Fail 'ROOT password setup is required before a non-interactive installation can continue.'
     }
-    Write-Host 'ROOT password setup is required for v0.34.6 Secure Cash Drawer Edition.' -ForegroundColor Yellow
+    Write-Host 'ROOT password setup is required for v0.34.7 Secure Cash Drawer Edition.' -ForegroundColor Yellow
     while ($true) {
         $secure1 = Read-Host 'Enter a new ROOT password (minimum 12 characters)' -AsSecureString
         $secure2 = Read-Host 'Confirm ROOT password' -AsSecureString
@@ -209,7 +209,7 @@ if ($LASTEXITCODE -ne 0) { Fail "Windows Service install failed with exit code $
 & sc.exe failure $ServiceName reset= 86400 actions= restart/5000/restart/15000/restart/30000 | Out-Null
 & sc.exe failureflag $ServiceName 1 | Out-Null
 
-Step 'Configuring Tailscale always-on recovery'
+Step 'Configuring Tailscale + Serve always-on recovery'
 $TailscaleService = Get-Service -Name 'Tailscale' -ErrorAction SilentlyContinue
 if ($TailscaleService) {
     & sc.exe config Tailscale start= auto | Out-Null
