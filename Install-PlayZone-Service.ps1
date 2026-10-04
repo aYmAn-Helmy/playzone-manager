@@ -23,11 +23,11 @@ function Get-Sha256Hex([string]$Path) {
     }
 }
 
-Write-Host 'PlayZone Manager v0.34.7 - Secure Cash Drawer Edition' -ForegroundColor Green
+Write-Host 'nourxplay v0.35.0 - White Label Edition' -ForegroundColor Green
 Write-Host 'Local backend + private Tailscale Serve support. Cloud Sync is disabled.'
 Write-Host 'Python is bundled offline. The installer downloads and verifies the official Electron/Chromium desktop runtime once if it is not bundled beside the installer.'
 
-Step 'Stopping previous PlayZone service'
+Step 'Stopping previous nourxplay service'
 $existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($existing) {
     if ($existing.Status -ne 'Stopped') {
@@ -49,7 +49,7 @@ Step 'Migrating financial data to protected storage'
 $SecureDb = Join-Path $SecureDataRoot 'playzone.db'
 $LegacyDb = Join-Path $DataRoot 'playzone.db'
 if ((Test-Path -LiteralPath $SecureDb) -and (Test-Path -LiteralPath $LegacyDb)) {
-    Fail "Both legacy and secure PlayZone databases exist. Installation stopped to avoid choosing the wrong financial database. Keep the correct database and move the other one aside, then run the installer again."
+    Fail "Both legacy and secure nourxplay databases exist. Installation stopped to avoid choosing the wrong financial database. Keep the correct database and move the other one aside, then run the installer again."
 }
 if (-not (Test-Path -LiteralPath $SecureDb) -and (Test-Path -LiteralPath $LegacyDb)) {
     foreach ($name in @('playzone.db','playzone.db-wal','playzone.db-shm')) {
@@ -58,7 +58,7 @@ if (-not (Test-Path -LiteralPath $SecureDb) -and (Test-Path -LiteralPath $Legacy
             Move-Item -LiteralPath $legacy -Destination (Join-Path $SecureDataRoot $name) -Force
         }
     }
-    Write-Host 'Existing PlayZone database moved into secure-data.' -ForegroundColor Green
+    Write-Host 'Existing nourxplay database moved into secure-data.' -ForegroundColor Green
 }
 
 $LegacyVoltra = Join-Path $DataRoot 'voltra.json'
@@ -138,8 +138,8 @@ if ($lines -notcontains '..\..\backend') {
     Set-Content -LiteralPath $Pth -Value $lines -Encoding ASCII
 }
 
-& $Python -c "import app.main, win32serviceutil, uvicorn; print('PlayZone service runtime OK')"
-if ($LASTEXITCODE -ne 0) { Fail 'PlayZone service runtime import check failed.' }
+& $Python -c "import app.main, win32serviceutil, uvicorn; print('nourxplay service runtime OK')"
+if ($LASTEXITCODE -ne 0) { Fail 'nourxplay service runtime import check failed.' }
 
 Step 'Finalizing pywin32 for Windows Service support'
 $PostInstall = Get-ChildItem -LiteralPath (Join-Path $InstallRoot '.runtime\python') -Filter 'pywin32_postinstall.py' -File -Recurse | Select-Object -First 1 -ExpandProperty FullName
@@ -220,7 +220,8 @@ if ($TailscaleService) {
 
 Step 'Configuring Voltra firewall'
 & netsh.exe advfirewall firewall delete rule name='PlayZone Manager Voltra TCP' | Out-Null
-& netsh.exe advfirewall firewall add rule name='PlayZone Manager Voltra TCP' dir=in action=allow protocol=TCP localport=10086 profile=any remoteip=localsubnet | Out-Null
+& netsh.exe advfirewall firewall delete rule name='nourxplay Voltra TCP' | Out-Null
+& netsh.exe advfirewall firewall add rule name='nourxplay Voltra TCP' dir=in action=allow protocol=TCP localport=10086 profile=any remoteip=localsubnet | Out-Null
 
 Step 'Preparing self-contained Chromium desktop runtime'
 $ElectronVersion = '44.4.5'
@@ -228,7 +229,7 @@ $ElectronArchive = "electron-v$ElectronVersion-win32-x64.zip"
 $ElectronUrl = "https://github.com/electron/electron/releases/download/v$ElectronVersion/$ElectronArchive"
 $ElectronSha256 = '11c395820a5aaa8ebcc0686b476d0ac98a730274ebfbdc8cf5538a7c2815cb5d'
 $DesktopRuntime = Join-Path $InstallRoot 'desktop-runtime'
-$DesktopExe = Join-Path $DesktopRuntime 'PlayZone Manager.exe'
+$DesktopExe = Join-Path $DesktopRuntime 'nourxplay.exe'
 $BundledElectron = Join-Path (Join-Path $SourceRoot 'desktop-runtime') $ElectronArchive
 $ElectronCacheRoot = Join-Path $DataRoot 'cache'
 $CachedElectron = Join-Path $ElectronCacheRoot $ElectronArchive
@@ -266,7 +267,7 @@ Expand-Archive -LiteralPath $ElectronZip -DestinationPath $DesktopRuntime -Force
 if (-not (Test-Path -LiteralPath (Join-Path $DesktopRuntime 'electron.exe'))) { Fail 'Electron runtime extraction did not produce electron.exe.' }
 Move-Item -LiteralPath (Join-Path $DesktopRuntime 'electron.exe') -Destination $DesktopExe -Force
 if ($ElectronZip -eq $TempElectron) { Remove-Item -LiteralPath $TempElectron -Force -ErrorAction SilentlyContinue }
-if (-not (Test-Path -LiteralPath $DesktopExe)) { Fail 'PlayZone Manager desktop executable was not created.' }
+if (-not (Test-Path -LiteralPath $DesktopExe)) { Fail 'nourxplay desktop executable was not created.' }
 Write-Host "Desktop browser ready: $DesktopExe" -ForegroundColor Green
 
 Step 'Creating verified desktop/start shortcuts'
@@ -278,13 +279,13 @@ function New-PlayZoneShortcut([string]$Folder) {
     if ([string]::IsNullOrWhiteSpace($Folder)) { return $null }
     try {
         New-Item -ItemType Directory -Force -Path $Folder | Out-Null
-        $path = Join-Path $Folder 'PlayZone Manager.lnk'
+        $path = Join-Path $Folder 'nourxplay.lnk'
         Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
         $s = $WshShell.CreateShortcut($path)
         $s.TargetPath = $DesktopExe
         $s.Arguments = '"' + $DesktopShell + '"'
         $s.WorkingDirectory = $DesktopRuntime
-        $s.Description = 'PlayZone Manager Desktop Edition'
+        $s.Description = 'nourxplay Desktop Edition'
         $s.IconLocation = (Join-Path $InstallRoot 'PlayStation.ico') + ',0'
         $s.Save()
         if (-not (Test-Path -LiteralPath $path)) { throw "Shortcut was not created: $path" }
@@ -362,7 +363,7 @@ foreach ($folder in @($desktopFolders | Select-Object -Unique)) {
     if ($created) { $desktopShortcuts += $created }
 }
 if ($desktopShortcuts.Count -lt 1) {
-    Fail 'Could not create a verified PlayZone Manager shortcut on any Windows Desktop location.'
+    Fail 'Could not create a verified nourxplay shortcut on any Windows Desktop location.'
 }
 
 # Start-menu and all-users Startup shortcuts are separate from the desktop shortcut.
@@ -376,7 +377,7 @@ foreach ($folder in @(
 $PrimaryDesktopShortcut = $desktopShortcuts[0]
 Write-Host "Desktop shortcut ready: $PrimaryDesktopShortcut" -ForegroundColor Green
 
-Step 'Starting PlayZone Manager Service'
+Step 'Starting nourxplay Service'
 Start-Service -Name $ServiceName
 $svc = Get-Service -Name $ServiceName
 $svc.WaitForStatus('Running', [TimeSpan]::FromSeconds(20))
@@ -411,10 +412,10 @@ try {
 if (-not $tcpOk) { Fail 'Voltra TCP 10086 is not listening. Check service.log before using the system.' }
 
 if (-not $NonInteractive) {
-    Step 'Opening PlayZone Manager independently from the installer console'
+    Step 'Opening nourxplay independently from the installer console'
     # Launch the verified .lnk through the Windows shell. Explorer owns the new
     # desktop process, so closing this installer CMD/PowerShell window cannot
-    # terminate PlayZone Manager.
+    # terminate nourxplay.
     $launched = $false
     try {
         Start-Process -FilePath "$env:WINDIR\explorer.exe" -ArgumentList @('"' + $PrimaryDesktopShortcut + '"')
@@ -432,22 +433,22 @@ if (-not $NonInteractive) {
         }
     }
     if (-not $launched) {
-        Write-Warning 'PlayZone Manager was installed successfully but could not be auto-opened. Use the PlayZone Manager desktop shortcut.'
+        Write-Warning 'nourxplay was installed successfully but could not be auto-opened. Use the nourxplay desktop shortcut.'
     }
 }
 
 Write-Host ''
 Write-Host '===================================================' -ForegroundColor Green
-Write-Host ' PlayZone Manager installation completed' -ForegroundColor Green
+Write-Host ' nourxplay installation completed' -ForegroundColor Green
 Write-Host '===================================================' -ForegroundColor Green
-Write-Host 'Desktop App : PlayZone Manager.exe (embedded Chromium / Electron)'
+Write-Host 'Desktop App : nourxplay.exe (embedded Chromium / Electron)'
 Write-Host 'Local Web   : http://127.0.0.1:8000 (internal backend only)'
 Write-Host 'Voltra TCP  : 10086'
 Write-Host "Data        : $DataRoot"
 Write-Host "Service log : $DataRoot\logs\service.log"
 Write-Host 'Cloud Sync  : DISABLED'
 Write-Host 'Internet    : Required once to download Electron unless its runtime ZIP is bundled; otherwise only for Tailscale remote support'
-Write-Host 'Remote setup: Run Setup-Tailscale-Support.bat as Administrator after Tailscale is installed'
+Write-Host 'Remote setup: Run Setup-nourxplay-Remote-Support.bat as Administrator after Tailscale is installed'
 Write-Host ''
 if (-not $NonInteractive) {
     Read-Host 'Press Enter to close'
