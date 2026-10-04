@@ -49,8 +49,41 @@ function Assert-OfflinePayload {
         throw 'Bundled get-pip.py is unexpectedly small.'
     }
     $wheelCount = @(Get-ChildItem -LiteralPath $Wheels -Filter '*.whl' -File).Count
-    if ($wheelCount -lt 15) {
+    if ($wheelCount -lt 20) {
         throw "Offline wheel set is incomplete. Found only $wheelCount wheel(s)."
+    }
+
+    $criticalWheelPatterns = @(
+        'fastapi-*.whl',
+        'starlette-*.whl',
+        'pydantic-*.whl',
+        'pydantic_core-*.whl',
+        'typing_extensions-*.whl',
+        'typing_inspection-*.whl',
+        'annotated_types-*.whl',
+        'annotated_doc-*.whl',
+        'uvicorn-*.whl',
+        'sqlalchemy-*.whl',
+        'greenlet-*.whl',
+        'httpx-*.whl',
+        'httpcore-*.whl',
+        'h11-*.whl',
+        'anyio-*.whl',
+        'idna-*.whl',
+        'certifi-*.whl',
+        'argon2_cffi-*.whl',
+        'argon2_cffi_bindings-*.whl',
+        'cffi-*.whl',
+        'pycparser-*.whl',
+        'pywin32-*.whl',
+        'tzdata-*.whl',
+        'click-*.whl',
+        'pip-*.whl'
+    )
+    foreach ($pattern in $criticalWheelPatterns) {
+        if (-not (Get-ChildItem -LiteralPath $Wheels -Filter $pattern -File | Select-Object -First 1)) {
+            throw "Offline runtime payload is incomplete. Missing wheel matching: $pattern"
+        }
     }
 }
 
