@@ -1,9 +1,9 @@
-PlayZone Manager v0.31 - Remote Support Edition
+nourxplay v0.31 - Remote Support Edition
 ================================================
 
 الفكرة الأمنية
 --------------
-- PlayZone Web Backend يظل على 127.0.0.1:8000 فقط.
+- nourxplay Web Backend يظل على 127.0.0.1:8000 فقط.
 - لا يتم فتح Port 8000 على الراوتر أو LAN.
 - Remote Support يستخدم Tailscale Serve HTTPS داخل الـTailnet فقط.
 - لا تستخدم Tailscale Funnel لهذا النظام.
@@ -26,7 +26,7 @@ PlayZone Manager v0.31 - Remote Support Edition
    http://127.0.0.1:8000
    عبر HTTPS على Tailscale فقط.
 5) بعد نجاح الإعداد سيظهر رابط مثل:
-   https://playzone-client-pc.<tailnet>.ts.net
+   https://nourxplay-client-pc.<tailnet>.ts.net
 
 من داخل ROOT
 ------------
@@ -46,10 +46,10 @@ PlayZone Manager v0.31 - Remote Support Edition
 
 Tag مقترح
 ---------
-tag:playzone-client
+tag:nourxplay-client
 
 يمكن تمرير Tag يدوياً إلى PowerShell:
-  powershell -ExecutionPolicy Bypass -File .\Setup-Tailscale-Support.ps1 -Tag tag:playzone-client
+  powershell -ExecutionPolicy Bypass -File .\Setup-Tailscale-Support.ps1 -Tag tag:nourxplay-client
 
 يجب أن تسمح سياسة الـTailnet لهذا الجهاز باستخدام الـTag.
 
@@ -58,18 +58,18 @@ tag:playzone-client
 يوجد أيضاً ملف جاهز للتعديل: TAILSCALE-GRANTS-EXAMPLE.json
 {
   "tagOwners": {
-    "tag:playzone-client": ["YOUR_SUPPORT_EMAIL@example.com"]
+    "tag:nourxplay-client": ["YOUR_SUPPORT_EMAIL@example.com"]
   },
   "grants": [
     {
       "src": ["YOUR_SUPPORT_EMAIL@example.com"],
-      "dst": ["tag:playzone-client"],
+      "dst": ["tag:nourxplay-client"],
       "ip": ["443"]
     }
   ]
 }
 
-الفكرة: حساب الدعم المحدد فقط يصل إلى أجهزة العملاء المعلّمة tag:playzone-client على HTTPS 443.
+الفكرة: حساب الدعم المحدد فقط يصل إلى أجهزة العملاء المعلّمة tag:nourxplay-client على HTTPS 443.
 ادمج هذا الجزء مع policy الحالية ولا تستبدل policy كاملة بدون مراجعة.
 
 إيقاف Remote Support

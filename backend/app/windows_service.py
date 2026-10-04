@@ -14,8 +14,8 @@ import win32service
 import win32serviceutil
 
 SERVICE_NAME = "PlayZoneManager"
-SERVICE_DISPLAY_NAME = "PlayZone Manager Service"
-SERVICE_DESCRIPTION = "PlayZone Manager local session, billing, Voltra and web runtime"
+SERVICE_DISPLAY_NAME = "nourxplay Service"
+SERVICE_DESCRIPTION = "nourxplay local session, billing, Voltra and web runtime"
 
 
 def _program_data() -> Path:
@@ -79,7 +79,7 @@ def _configure_environment() -> Path:
     os.environ.setdefault("VOLTRA_RESPONSE_TIMEOUT", "3")
     os.environ.setdefault("PLAYZONE_CLOUD_SYNC_ENABLED", "0")
     # Customer installations keep private Tailscale Serve available without
-    # requiring a user to open PlayZone or press Enable Remote Access.
+    # requiring a user to open nourxplay or press Enable Remote Access.
     os.environ.setdefault("PLAYZONE_REMOTE_SUPPORT_ALWAYS_ON", "1")
     return data
 
@@ -118,7 +118,7 @@ class PlayZoneManagerService(win32serviceutil.ServiceFramework):
         try:
             data = _configure_environment()
             _configure_logging(data)
-            logging.info("Starting PlayZone Manager Windows Service")
+            logging.info("Starting nourxplay Windows Service")
 
             import uvicorn
 

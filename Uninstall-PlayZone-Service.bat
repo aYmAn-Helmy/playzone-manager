@@ -1,6 +1,6 @@
 @echo off
 setlocal
-title PlayZone Manager - Uninstall
+title nourxplay - Uninstall
 
 net session >nul 2>&1
 if not "%errorlevel%"=="0" (
@@ -19,12 +19,12 @@ if not exist "%~dp0Uninstall-PlayZone-Service.ps1" (
 )
 
 echo.
-echo PlayZone Manager - Uninstaller
+echo nourxplay - Uninstaller
 echo ==============================
 echo.
 echo By default, financial data and backups are preserved.
 echo To remove protected data too, run:
-echo   Uninstall-PlayZone-Service.bat /RemoveData
+echo   Uninstall-nourxplay.bat /RemoveData
 echo.
 
 set "EXTRA_ARGS="
@@ -38,7 +38,7 @@ echo.
 if not "%RC%"=="0" (
   echo [ERROR] Uninstall failed with exit code %RC%.
 ) else (
-  echo PlayZone Manager uninstall completed.
+  echo nourxplay uninstall completed.
 )
 pause
 exit /b %RC%

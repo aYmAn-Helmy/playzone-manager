@@ -1,7 +1,7 @@
 {
-  "name": "playzone-manager-desktop",
-  "productName": "PlayZone Manager",
-  "version": "0.34.7",
+  "name": "nourxplay-desktop",
+  "productName": "nourxplay",
+  "version": "0.35.0",
   "private": true,
   "main": "main.js"
 }

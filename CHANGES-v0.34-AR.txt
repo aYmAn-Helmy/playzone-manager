@@ -1,4 +1,4 @@
-PlayZone Manager v0.34.6 — Client Acceptance
+nourxplay v0.34.6 — Client Acceptance
 ================================================
 
 - الموظف يفتح وردية واحدة فقط للدرج وتبدأ برصيد نظامي صفر.
@@ -26,10 +26,10 @@ PlayZone Manager v0.34.6 — Client Acceptance
 حماية ملفات البيانات على Windows
 --------------------------------
 - قاعدة البيانات وVoltra والـBackups تنتقل عند Upgrade إلى:
-  C:\ProgramData\PlayZone Manager\secure-data
+  C:\ProgramData\nourxplay\secure-data
 - secure-data يسمح بالوصول فقط إلى LocalSystem وAdministrators.
 - Windows Service يعيد التحقق من ACL عند كل تشغيل.
-- desktop-profile والكاش يظلان خارج secure-data حتى يعمل تطبيق PlayZone للمستخدم العادي.
+- desktop-profile والكاش يظلان خارج secure-data حتى يعمل تطبيق nourxplay للمستخدم العادي.
 - إذا وجد الـInstaller قاعدة legacy وقاعدة secure في نفس الوقت فإنه يوقف التثبيت بدلاً من اختيار قاعدة عشوائياً.
 
 إصلاحات Client Final v0.34.2
@@ -37,7 +37,7 @@ PlayZone Manager v0.34.6 — Client Acceptance
 - إصلاح حزمة الـOffline Runtime التي كانت تحذف typing_inspection من الباكدج النهائية بسبب فلتر تنظيف واسع.
 - إضافة فحص مبكر داخل Bootstrap-Portable.ps1 للتأكد من وجود الـwheels الحرجة قبل بدء تثبيت Python.
 - إضافة Uninstall-PlayZone-Service.bat واضح للعميل مع طلب صلاحيات Administrator تلقائياً.
-- الـInstaller ينسخ ملفات الـUninstall إلى C:\Program Files\PlayZone Manager أثناء التثبيت.
+- الـInstaller ينسخ ملفات الـUninstall إلى C:\Program Files\nourxplay أثناء التثبيت.
 - Build العميل النهائي يختبر تثبيت Python فعلياً من الـpackage المنظفة باستخدام --no-index قبل إنشاء ملف ZIP.
 
 إصلاحات واجهة التشغيل v0.34.3
@@ -62,9 +62,9 @@ PlayZone Manager v0.34.6 — Client Acceptance
 -------------------------------------
 - إصلاح إنشاء Shortcut بحيث يتم التحقق من Desktop الفعلي للمستخدم بما فيه Desktop redirected/OneDrive، مع fallback إلى All Users Desktop.
 - الـInstaller يفشل بوضوح إذا لم يستطع إنشاء Shortcut صالح بدل ما يكمل بدون Shortcut.
-- يتم التحقق من Target داخل ملف الـLNK بعد إنشائه للتأكد أنه يشير إلى PlayZone Manager.exe المثبت.
-- تشغيل PlayZone بعد التثبيت يتم عن طريق Windows Shell كعملية مستقلة عن نافذة CMD/PowerShell الخاصة بالـInstaller.
-- إغلاق نافذة التثبيت أو الـTerminal لا يجب أن يغلق تطبيق PlayZone Manager أو Windows Service.
+- يتم التحقق من Target داخل ملف الـLNK بعد إنشائه للتأكد أنه يشير إلى nourxplay.exe المثبت.
+- تشغيل nourxplay بعد التثبيت يتم عن طريق Windows Shell كعملية مستقلة عن نافذة CMD/PowerShell الخاصة بالـInstaller.
+- إغلاق نافذة التثبيت أو الـTerminal لا يجب أن يغلق تطبيق nourxplay أو Windows Service.
 - يظل هناك Shortcut في Start Menu وStartup إلى جانب Shortcut الـDesktop.
 
 تحسينات الأداء v0.34.6

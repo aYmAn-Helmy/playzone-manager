@@ -4,7 +4,7 @@ const http = require('http');
 
 const BASE_URL = 'http://127.0.0.1:8000';
 const HEALTH_URL = `${BASE_URL}/api/health`;
-const APP_URL = `${BASE_URL}/?desktop=playzone-v0345`;
+const APP_URL = `${BASE_URL}/?desktop=nourxplay-v0350`;
 const ALLOWED_ORIGIN = new URL(BASE_URL).origin;
 let mainWindow = null;
 let loading = false;
@@ -13,8 +13,8 @@ const dataRoot = process.env.PROGRAMDATA
   ? path.join(process.env.PROGRAMDATA, 'PlayZone Manager', 'desktop-profile')
   : path.join(app.getPath('userData'), 'PlayZone Manager');
 app.setPath('userData', dataRoot);
-app.setName('PlayZone Manager');
-app.setAppUserModelId('PlayZone.Manager.Desktop');
+app.setName('nourxplay');
+app.setAppUserModelId('nourxplay.Desktop');
 app.commandLine.appendSwitch('disable-features', 'AutofillServerCommunication,PasswordManagerOnboarding');
 
 const gotLock = app.requestSingleInstanceLock();
@@ -42,9 +42,9 @@ function healthCheck(timeoutMs = 1200) {
 }
 
 function waitingHtml() {
-  const html = `<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><title>PlayZone Manager</title>
+  const html = `<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><title>nourxplay</title>
   <style>html,body{height:100%;margin:0;font-family:Segoe UI,Tahoma,Arial;background:#06101c;color:#eaf3ff}body{display:grid;place-items:center}.box{width:min(560px,90vw);background:#0d1d2e;border:1px solid #1d4268;border-radius:18px;padding:32px;text-align:center;box-shadow:0 25px 80px #0008}h1{margin:0 0 10px;color:#48a7ff}.spin{width:34px;height:34px;border:4px solid #163652;border-top-color:#4aa8ff;border-radius:50%;margin:24px auto;animation:s 1s linear infinite}@keyframes s{to{transform:rotate(360deg)}}p{color:#9db3ca;line-height:1.8}</style>
-  <body><div class="box"><h1>PlayZone Manager</h1><div class="spin"></div><h2>جاري تشغيل النظام...</h2><p>التطبيق ينتظر خدمة PlayZone المحلية على هذا الجهاز.<br>لو استمر الانتظار راجع خدمة <b>PlayZoneManager</b>.</p></div></body></html>`;
+  <body><div class="box"><h1>nourxplay</h1><div class="spin"></div><h2>جاري تشغيل النظام...</h2><p>التطبيق ينتظر خدمة nourxplay المحلية على هذا الجهاز.<br>لو استمر الانتظار راجع خدمة النظام المحلية.</p></div></body></html>`;
   return 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
 }
 
@@ -81,7 +81,7 @@ function isAllowedNavigation(url) {
 function createWindow() {
   const installRoot = path.resolve(__dirname, '..');
   mainWindow = new BrowserWindow({
-    title: 'PlayZone Manager',
+    title: 'nourxplay',
     width: 1440,
     height: 900,
     minWidth: 1024,
@@ -106,7 +106,7 @@ function createWindow() {
   Menu.setApplicationMenu(null);
   mainWindow.setMenuBarVisibility(false);
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    // Keep the desktop client locked to its local PlayZone service.
+    // Keep the desktop client locked to its local nourxplay service.
     if (isAllowedNavigation(url)) return { action: 'allow' };
     return { action: 'deny' };
   });
@@ -129,7 +129,7 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  // Avoid stale frontend bundles between PlayZone upgrades while preserving localStorage/login state.
+  // Avoid stale frontend bundles between nourxplay upgrades while preserving localStorage/login state.
   try { await session.defaultSession.clearCache(); } catch (_) {}
   session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
   createWindow();

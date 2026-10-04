@@ -30,8 +30,8 @@ if (-not $exe) {
     throw 'Tailscale is not installed. Install Tailscale first, then run this setup again.'
 }
 
-Write-Host 'PlayZone Manager v0.34.7 - Tailscale Remote Support Setup' -ForegroundColor Cyan
-Write-Host 'The PlayZone backend remains bound to 127.0.0.1:8000.'
+Write-Host 'nourxplay v0.35.0 - Tailscale Remote Support Setup' -ForegroundColor Cyan
+Write-Host 'The nourxplay backend remains bound to 127.0.0.1:8000.'
 Write-Host 'This script enables private Tailscale Serve only; it does not enable Funnel.'
 
 & sc.exe config Tailscale start= auto | Out-Null
@@ -39,7 +39,7 @@ Write-Host 'This script enables private Tailscale Serve only; it does not enable
 & sc.exe failureflag Tailscale 1 | Out-Null
 Start-Service Tailscale -ErrorAction SilentlyContinue
 
-$rawName = ('playzone-' + $env:COMPUTERNAME.ToLower())
+$rawName = ('nourxplay-' + $env:COMPUTERNAME.ToLower())
 $hostName = ($rawName -replace '[^a-z0-9-]', '-').Trim('-')
 if ($hostName.Length -gt 63) { $hostName = $hostName.Substring(0,63).TrimEnd('-') }
 
@@ -53,7 +53,7 @@ Invoke-Tailscale $up
 Write-Host "`n[2/3] Enabling private HTTPS Remote Support with Tailscale Serve..." -ForegroundColor Yellow
 try {
     $health = Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 'http://127.0.0.1:8000/api/health'
-    if ($health.StatusCode -ne 200) { throw 'PlayZone local backend is not healthy on 127.0.0.1:8000.' }
+    if ($health.StatusCode -ne 200) { throw 'nourxplay local backend is not healthy on 127.0.0.1:8000.' }
     Invoke-Tailscale @('serve','--bg','--yes','--https=443','http://127.0.0.1:8000')
 }
 catch {
@@ -79,6 +79,6 @@ try {
 } catch { }
 
 Write-Host ''
-Write-Host 'Remote Support is available only inside the tailnet and is kept active automatically by the PlayZone Windows Service.' -ForegroundColor Green
-Write-Host 'If Tailscale or Serve stops, PlayZone checks and restores it automatically.' -ForegroundColor Green
+Write-Host 'Remote Support is available only inside the tailnet and is kept active automatically by the nourxplay Windows Service.' -ForegroundColor Green
+Write-Host 'If Tailscale or Serve stops, nourxplay checks and restores it automatically.' -ForegroundColor Green
 Read-Host 'Press Enter to close'

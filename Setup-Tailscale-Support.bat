@@ -1,4 +1,5 @@
 @echo off
+title nourxplay - Remote Support
 cd /d "%~dp0"
 net session >nul 2>&1
 if not "%errorlevel%"=="0" (

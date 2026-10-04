@@ -11,8 +11,8 @@ $DataRoot = Join-Path $env:ProgramData 'PlayZone Manager'
 
 function Step([string]$Text) { Write-Host "`n==> $Text" -ForegroundColor Cyan }
 
-Write-Host 'PlayZone Manager - Complete Uninstaller' -ForegroundColor Yellow
-Write-Host 'Removes the PlayZone/PlayZone Manager service, shortcuts, firewall rules and application files.'
+Write-Host 'nourxplay - Complete Uninstaller' -ForegroundColor Yellow
+Write-Host 'Removes nourxplay service components, shortcuts, firewall rules and application files.'
 Write-Host 'Tailscale itself is NOT removed unless -RemoveTailscale is explicitly supplied.'
 
 Step 'Stopping and removing Windows service'
@@ -25,7 +25,7 @@ if ($svc) {
 & sc.exe stop $ServiceName 2>$null | Out-Null
 & sc.exe delete $ServiceName 2>$null | Out-Null
 
-Step 'Removing PlayZone Tailscale Serve configuration'
+Step 'Removing nourxplay Tailscale Serve configuration'
 $tailscaleCandidates = @(
     (Get-Command tailscale.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -ErrorAction SilentlyContinue),
     (Join-Path $env:ProgramFiles 'Tailscale\tailscale.exe'),
@@ -47,14 +47,14 @@ if ($tailscaleExe) {
 
 Step 'Removing firewall rules'
 foreach ($rule in @(
-    'PlayZone Manager Voltra TCP',
+    'nourxplay Voltra TCP',
     'PlayZone Manager Voltra TCP'
 )) {
     & netsh.exe advfirewall firewall delete rule name=$rule 2>$null | Out-Null
 }
 
 Step 'Removing shortcuts and startup launchers'
-$shortcutNames = @('PlayZone Manager.lnk')
+$shortcutNames = @('nourxplay.lnk','PlayZone Manager.lnk')
 $shortcutFolders = @(
     [Environment]::GetFolderPath('CommonDesktopDirectory'),
     [Environment]::GetFolderPath('CommonPrograms'),
@@ -69,7 +69,8 @@ foreach ($folder in $shortcutFolders) {
     }
 }
 
-Step 'Stopping PlayZone Manager Desktop/Chromium processes'
+Step 'Stopping nourxplay Desktop/Chromium processes'
+Get-Process -Name 'nourxplay' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Get-Process -Name 'PlayZone Manager' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
 Step 'Stopping leftover application processes'
@@ -100,7 +101,7 @@ if ($left) {
 }
 
 Write-Host ''
-Write-Host 'PlayZone Manager / PlayZone service components were removed successfully.' -ForegroundColor Green
+Write-Host 'nourxplay / nourxplay service components were removed successfully.' -ForegroundColor Green
 if (-not $RemoveTailscale) {
     Write-Host 'Tailscale application/service was left installed because it is an external dependency.' -ForegroundColor DarkGray
 }

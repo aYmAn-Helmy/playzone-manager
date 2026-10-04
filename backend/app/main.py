@@ -176,7 +176,7 @@ UI_CONFIG_DEFAULTS: dict[str, bool] = {
     "show_nav_voltra": True,
 }
 
-app = FastAPI(title="PlayZone Manager API", version="0.34.7")
+app = FastAPI(title="nourxplay API", version="0.35.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -704,7 +704,7 @@ def _station_power_monitor(
             "message": reason,
         })
 
-    # Alert 3: actual TV load exists while no PlayZone session exists. Relay ON
+    # Alert 3: actual TV load exists while no nourxplay session exists. Relay ON
     # by itself is not enough because a TV in standby may legitimately draw a
     # tiny amount of power.
     screen_on_without_session = (
@@ -857,11 +857,11 @@ _VOLTRA_CONSOLE_API = "http://127.0.0.1:8086/voltra/api"
 
 
 def _embedded_voltra_console_html() -> str:
-    """Serve the native Voltra dashboard in PlayZone mode."""
+    """Serve the native Voltra dashboard in nourxplay mode."""
     html = VOLTRA_DASHBOARD_HTML
     html = html.replace(
         "<title>Voltra Power Manager</title>",
-        "<title>PlayZone Manager — Voltra</title>",
+        "<title>nourxplay — Voltra</title>",
     )
     html = html.replace(
         "</style></head>",
@@ -873,7 +873,7 @@ def _embedded_voltra_console_html() -> str:
     )
     html = html.replace(
         '<body><div class="shell">',
-        '<body><a class="pz-playzone-back" href="/">← العودة إلى PlayZone</a><div class="shell">',
+        '<body><a class="pz-playzone-back" href="/">← العودة إلى nourxplay</a><div class="shell">',
     )
     return html
 
@@ -881,7 +881,7 @@ def _embedded_voltra_console_html() -> str:
 @app.get("/voltra-console", response_class=HTMLResponse)
 def embedded_voltra_console():
     # The HTML shell itself contains no customer/device data. Every data/action
-    # request is proxied through a ROOT-authenticated PlayZone API below.
+    # request is proxied through a ROOT-authenticated nourxplay API below.
     return HTMLResponse(_embedded_voltra_console_html(), headers={"Cache-Control": "no-store"})
 
 
@@ -2064,7 +2064,7 @@ def _validate_backup(path: Path) -> None:
             names = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             required = {"users", "stations", "play_sessions", "invoices"}
             if not required.issubset(names):
-                raise HTTPException(422, "Invalid PlayZone backup")
+                raise HTTPException(422, "Invalid nourxplay backup")
             integrity = conn.execute("PRAGMA integrity_check").fetchone()
             if not integrity or str(integrity[0]).lower() != "ok":
                 raise HTTPException(422, "Backup integrity check failed")
