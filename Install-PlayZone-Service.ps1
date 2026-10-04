@@ -11,7 +11,7 @@ $ServiceName = 'PlayZoneManager'
 function Step([string]$Text) { Write-Host "`n==> $Text" -ForegroundColor Cyan }
 function Fail([string]$Text) { throw $Text }
 
-Write-Host 'PlayZone Manager v0.34.4 - Secure Cash Drawer Edition' -ForegroundColor Green
+Write-Host 'PlayZone Manager v0.34.5 - Secure Cash Drawer Edition' -ForegroundColor Green
 Write-Host 'Local backend + private Tailscale Serve support. Cloud Sync is disabled.'
 Write-Host 'Python is bundled offline. The installer downloads and verifies the official Electron/Chromium desktop runtime once if it is not bundled beside the installer.'
 
@@ -148,7 +148,7 @@ if ($rootStatus -eq 3) {
     if ($NonInteractive) {
         Fail 'ROOT password setup is required before a non-interactive installation can continue.'
     }
-    Write-Host 'ROOT password setup is required for v0.34.4 Secure Cash Drawer Edition.' -ForegroundColor Yellow
+    Write-Host 'ROOT password setup is required for v0.34.5 Secure Cash Drawer Edition.' -ForegroundColor Yellow
     while ($true) {
         $secure1 = Read-Host 'Enter a new ROOT password (minimum 12 characters)' -AsSecureString
         $secure2 = Read-Host 'Confirm ROOT password' -AsSecureString
@@ -240,7 +240,7 @@ if (Test-Path -LiteralPath $BundledElectron) {
         Invoke-WebRequest -UseBasicParsing -Uri $ElectronUrl -OutFile $TempElectron
         $ElectronZip = $TempElectron
     } catch {
-        Fail "Could not download the desktop browser runtime. Internet is required once during v0.34.4 installation unless $ElectronArchive is placed inside a desktop-runtime folder beside the installer. $($_.Exception.Message)"
+        Fail "Could not download the desktop browser runtime. Internet is required once during v0.34.5 installation unless $ElectronArchive is placed inside a desktop-runtime folder beside the installer. $($_.Exception.Message)"
     }
 }
 
@@ -257,30 +257,70 @@ if ($ElectronZip -eq $TempElectron) { Remove-Item -LiteralPath $TempElectron -Fo
 if (-not (Test-Path -LiteralPath $DesktopExe)) { Fail 'PlayZone Manager desktop executable was not created.' }
 Write-Host "Desktop browser ready: $DesktopExe" -ForegroundColor Green
 
-Step 'Creating shortcuts and login launcher'
-# Remove legacy shortcut names so an upgrade cannot keep launching an old-looking entry.
-foreach ($legacy in @(
-    (Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'PlayZone Manager.lnk'),
-    (Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'PlayZone Manager.lnk'),
-    (Join-Path ([Environment]::GetFolderPath('CommonStartup')) 'PlayZone Manager.lnk')
-)) { Remove-Item -LiteralPath $legacy -Force -ErrorAction SilentlyContinue }
+Step 'Creating verified desktop/start shortcuts'
 $Launcher = Join-Path $InstallRoot 'Launch-PlayZone.ps1'
 $DesktopShell = Join-Path $InstallRoot 'desktop-shell'
-$Shell = New-Object -ComObject WScript.Shell
-$shortcutTargets = @(
-    (Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'PlayZone Manager.lnk'),
-    (Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'PlayZone Manager.lnk'),
-    (Join-Path ([Environment]::GetFolderPath('CommonStartup')) 'PlayZone Manager.lnk')
-)
-foreach ($path in $shortcutTargets) {
-    $s = $Shell.CreateShortcut($path)
-    $s.TargetPath = $DesktopExe
-    $s.Arguments = '"' + $DesktopShell + '"'
-    $s.WorkingDirectory = $DesktopRuntime
-    $s.Description = 'PlayZone Manager Desktop Edition'
-    $s.IconLocation = (Join-Path $InstallRoot 'PlayStation.ico') + ',0'
-    $s.Save()
+$WshShell = New-Object -ComObject WScript.Shell
+
+function New-PlayZoneShortcut([string]$Folder) {
+    if ([string]::IsNullOrWhiteSpace($Folder)) { return $null }
+    try {
+        New-Item -ItemType Directory -Force -Path $Folder | Out-Null
+        $path = Join-Path $Folder 'PlayZone Manager.lnk'
+        Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+        $s = $WshShell.CreateShortcut($path)
+        $s.TargetPath = $DesktopExe
+        $s.Arguments = '"' + $DesktopShell + '"'
+        $s.WorkingDirectory = $DesktopRuntime
+        $s.Description = 'PlayZone Manager Desktop Edition'
+        $s.IconLocation = (Join-Path $InstallRoot 'PlayStation.ico') + ',0'
+        $s.Save()
+        if (-not (Test-Path -LiteralPath $path)) { throw "Shortcut was not created: $path" }
+
+        # Re-open the shortcut and verify that it actually points to the installed desktop client.
+        $check = $WshShell.CreateShortcut($path)
+        if ($check.TargetPath -ne $DesktopExe) { throw "Shortcut target mismatch: $path" }
+        return $path
+    } catch {
+        Write-Warning "Could not create shortcut in '$Folder': $($_.Exception.Message)"
+        return $null
+    }
 }
+
+# Resolve both the real logged-in desktop (including redirected/OneDrive desktops)
+# and the all-users desktop. At least one verified desktop shortcut is mandatory.
+$userDesktopCandidates = @(
+    $WshShell.SpecialFolders.Item('Desktop'),
+    [Environment]::GetFolderPath('DesktopDirectory'),
+    $(if ($env:USERPROFILE) { Join-Path $env:USERPROFILE 'Desktop' }),
+    $(if ($env:OneDrive) { Join-Path $env:OneDrive 'Desktop' }),
+    $(if ($env:OneDriveConsumer) { Join-Path $env:OneDriveConsumer 'Desktop' })
+) | Where-Object { $_ } | Select-Object -Unique
+
+$commonDesktopCandidates = @(
+    $WshShell.SpecialFolders.Item('AllUsersDesktop'),
+    [Environment]::GetFolderPath('CommonDesktopDirectory')
+) | Where-Object { $_ } | Select-Object -Unique
+
+$desktopShortcuts = @()
+foreach ($folder in @($userDesktopCandidates + $commonDesktopCandidates) | Select-Object -Unique) {
+    $created = New-PlayZoneShortcut $folder
+    if ($created) { $desktopShortcuts += $created }
+}
+if ($desktopShortcuts.Count -lt 1) {
+    Fail 'Could not create a verified PlayZone Manager shortcut on any Windows Desktop location.'
+}
+
+# Start-menu and all-users Startup shortcuts are separate from the desktop shortcut.
+foreach ($folder in @(
+    [Environment]::GetFolderPath('CommonPrograms'),
+    [Environment]::GetFolderPath('CommonStartup')
+) | Where-Object { $_ } | Select-Object -Unique) {
+    [void](New-PlayZoneShortcut $folder)
+}
+
+$PrimaryDesktopShortcut = $desktopShortcuts[0]
+Write-Host "Desktop shortcut ready: $PrimaryDesktopShortcut" -ForegroundColor Green
 
 Step 'Starting PlayZone Manager Service'
 Start-Service -Name $ServiceName
@@ -317,8 +357,21 @@ try {
 if (-not $tcpOk) { Fail 'Voltra TCP 10086 is not listening. Check service.log before using the system.' }
 
 if (-not $NonInteractive) {
-    Step 'Opening PlayZone Manager Desktop'
-    Start-Process -FilePath $DesktopExe -ArgumentList @('"' + $DesktopShell + '"') -WorkingDirectory $DesktopRuntime
+    Step 'Opening PlayZone Manager Desktop independently'
+    # Delegate launch to the Windows shell so the desktop process is not tied
+    # to this elevated installer terminal. Closing CMD/PowerShell must not close PlayZone.
+    $launched = $false
+    try {
+        $ShellApplication = New-Object -ComObject Shell.Application
+        $ShellApplication.ShellExecute($DesktopExe, ('"' + $DesktopShell + '"'), $DesktopRuntime, 'open', 1)
+        $launched = $true
+    } catch {
+        Write-Warning "Windows shell launch failed; using detached cmd start fallback. $($_.Exception.Message)"
+    }
+    if (-not $launched) {
+        $cmdLine = 'start "" "' + $DesktopExe + '" "' + $DesktopShell + '"'
+        Start-Process -FilePath $env:ComSpec -ArgumentList @('/d','/c',$cmdLine) -WindowStyle Hidden
+    }
 }
 
 Write-Host ''
