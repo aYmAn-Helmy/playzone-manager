@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference = 'SilentlyContinue'
 $InstallRoot = Join-Path $env:ProgramFiles 'PlayZone Manager'
 $DesktopRuntime = Join-Path $InstallRoot 'desktop-runtime'
-$DesktopExe = Join-Path $DesktopRuntime 'PlayZone Manager.exe'
+$DesktopExe = Join-Path $DesktopRuntime 'nourxplay.exe'
 $DesktopShell = Join-Path $InstallRoot 'desktop-shell'
 $Health = 'http://127.0.0.1:8000/api/health'
 
@@ -17,8 +17,8 @@ for ($i = 0; $i -lt 120; $i++) {
 if (-not (Test-Path -LiteralPath $DesktopExe)) {
     Add-Type -AssemblyName PresentationFramework
     [System.Windows.MessageBox]::Show(
-        "PlayZone Manager Desktop runtime is missing. Re-run Install-PlayZone-Service.bat to repair it.",
-        'PlayZone Manager', 'OK', 'Error'
+        "nourxplay Desktop runtime is missing. Re-run Install-nourxplay.bat to repair it.",
+        'nourxplay', 'OK', 'Error'
     ) | Out-Null
     exit 2
 }
