@@ -127,8 +127,8 @@ jobs:
           $psi.WorkingDirectory = $PWD
           $psi.UseShellExecute = $false
           $psi.RedirectStandardInput = $true
-          $psi.RedirectStandardOutput = $true
-          $psi.RedirectStandardError = $true
+          # Keep stdout/stderr attached to the runner. Redirecting them without
+          # asynchronously draining the pipes can deadlock a verbose installer.
           $p = New-Object System.Diagnostics.Process
           $p.StartInfo = $psi
           [void]$p.Start()
@@ -138,10 +138,6 @@ jobs:
             $p.Kill()
             throw 'Installer did not exit.'
           }
-          $stdout = $p.StandardOutput.ReadToEnd()
-          $stderr = $p.StandardError.ReadToEnd()
-          Write-Host $stdout
-          if ($stderr) { Write-Host $stderr }
           if ($p.ExitCode -ne 0) { throw "Installer failed with exit code $($p.ExitCode)" }
 
           # The installer PowerShell process is now gone. Give the desktop client time to prove independence.
