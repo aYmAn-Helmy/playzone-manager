@@ -14,7 +14,6 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     env:
-      PLAYZONE_DB_PATH: ${{ runner.temp }}\ui-actions.db
       VOLTRA_DEMO: "1"
       VOLTRA_HTTP_PORT: "48086"
       VOLTRA_TCP_PORT: "48087"
@@ -30,6 +29,8 @@ jobs:
       - name: Seed activated admin and staff
         shell: pwsh
         run: |
+          $env:PLAYZONE_DB_PATH = Join-Path $env:RUNNER_TEMP 'ui-actions.db'
+          "PLAYZONE_DB_PATH=$env:PLAYZONE_DB_PATH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           @'
           from sqlalchemy import select
           from app.main import seed_data
