@@ -1,0 +1,80 @@
+name: SaaS core tests
+
+on:
+  push:
+    branches: [saas-v1]
+    paths:
+      - "saas/**"
+      - ".github/workflows/saas-core-tests.yml"
+  pull_request:
+    paths:
+      - "saas/**"
+      - ".github/workflows/saas-core-tests.yml"
+
+jobs:
+  cloud:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: saas/cloud
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: PYTHONPATH=. pytest -q
+
+  edge:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: saas/edge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: PYTHONPATH=. pytest -q
+      - run: python -m py_compile integration/v027_edge_runtime.py integration/v027_edge_commands.py integration/apply_to_v027.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PlayZoneManager-Edge-Packaging-Sources
+          path: |
+            saas/edge/integration/**
+            saas/installer/**
+
+  desktop:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: saas/desktop/PlayZoneManager.Desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - run: dotnet restore
+      - run: dotnet build -c Release --no-restore
+      - run: dotnet restore -r win-x64
+      - run: dotnet publish -c Release -r win-x64 --self-contained true --no-restore -o publish
+      - name: Validate installer PowerShell syntax
+        working-directory: ${{ github.workspace }}
+        shell: pwsh
+        run: |
+          $failed = $false
+          Get-ChildItem saas/installer/*.ps1 | ForEach-Object {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              $failed = $true
+              Write-Error ("Syntax errors in " + $_.Name + ": " + ($errors | ForEach-Object Message | Out-String))
+            }
+          }
+          if ($failed) { exit 1 }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PlayZoneManager-Desktop-win-x64-selfcontained
+          path: saas/desktop/PlayZoneManager.Desktop/publish/**

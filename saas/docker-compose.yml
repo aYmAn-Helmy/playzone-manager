@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: playzone
+      POSTGRES_USER: playzone
+      POSTGRES_PASSWORD: playzone-dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U playzone -d playzone"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - playzone_postgres:/var/lib/postgresql/data
+
+  cloud:
+    build:
+      context: ./cloud
+    environment:
+      DATABASE_URL: postgresql://playzone:playzone-dev@postgres:5432/playzone
+      PLAYZONE_PLATFORM_ADMIN_USERNAME: platform
+      PLAYZONE_PLATFORM_ADMIN_PASSWORD: ChangeMe-123!
+      PORT: "8080"
+    ports:
+      - "8088:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  playzone_postgres:
