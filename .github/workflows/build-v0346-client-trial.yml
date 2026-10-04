@@ -1,0 +1,208 @@
+name: Build PlayZone v0.34.6 Client Trial
+
+on:
+  push:
+    branches:
+      - release/v0346-client-trial-2026-10-04
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  client-trial:
+    runs-on: windows-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate v0.34.6 source
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION.txt -Raw).Trim()
+          if ($version -ne '0.34.6') { throw "Expected v0.34.6, got $version" }
+
+          python -m py_compile backend/app/main.py backend/app/services.py backend/app/models.py backend/app/schemas.py backend/app/db.py backend/app/windows_service.py backend/app/embedded_voltra.py
+          node --check frontend/dist/assets/index-v031.js
+          node --check frontend/dist/playzone-responsive.js
+          node --check desktop-shell/main.js
+
+          $js = Get-Content frontend/dist/assets/index-v031.js -Raw
+          if (-not $js.Contains('PzLive=')) { throw 'Realtime session calculator missing.' }
+          if (-not $js.Contains('PzPatchSession')) { throw 'Immediate session patch helper missing.' }
+          if (-not $js.Contains('value:Qe(live.elapsed)')) { throw 'Live elapsed rendering missing.' }
+          if (-not $js.Contains('value:Qe(live.billable)')) { throw 'Live billable rendering missing.' }
+
+      - name: Prepare clean client package
+        shell: pwsh
+        run: |
+          $pkg = Join-Path $PWD 'package'
+          New-Item -ItemType Directory -Force -Path $pkg | Out-Null
+
+          foreach ($dir in @('backend','frontend','offline-runtime','desktop-shell')) {
+            if (-not (Test-Path -LiteralPath $dir)) { throw "Required directory missing: $dir" }
+            Copy-Item -LiteralPath $dir -Destination (Join-Path $pkg $dir) -Recurse -Force
+          }
+
+          $desktopRuntime = Join-Path $pkg 'desktop-runtime'
+          New-Item -ItemType Directory -Force -Path $desktopRuntime | Out-Null
+          if (Test-Path -LiteralPath 'desktop-runtime') {
+            Copy-Item -LiteralPath 'desktop-runtime\*' -Destination $desktopRuntime -Recurse -Force -ErrorAction SilentlyContinue
+          }
+
+          foreach ($file in @(
+            'Bootstrap-Portable.ps1',
+            'Install-PlayZone-Service.bat',
+            'Install-PlayZone-Service.ps1',
+            'Launch-PlayZone.ps1',
+            'Uninstall-PlayZone-Service.bat',
+            'Uninstall-PlayZone-Service.ps1',
+            'Setup-Root-Password.bat',
+            'Setup-Root-Password.ps1',
+            'Setup-Tailscale-Support.bat',
+            'Setup-Tailscale-Support.ps1',
+            'REMOTE-SUPPORT-SETUP-AR.txt',
+            'TAILSCALE-GRANTS-EXAMPLE.json',
+            'PlayStation.ico',
+            'README-SERVICE-AR.txt',
+            'CHANGES-v0.34-AR.txt',
+            'DESKTOP-RUNTIME-AR.txt',
+            'VERSION.txt'
+          )) {
+            if (Test-Path -LiteralPath $file) {
+              Copy-Item -LiteralPath $file -Destination $pkg -Force
+            }
+          }
+
+          Get-ChildItem -LiteralPath $pkg -Recurse -Directory -Force |
+            Where-Object { $_.Name -in @('__pycache__','.pytest_cache','.git','.github','node_modules') } |
+            Sort-Object FullName -Descending |
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+          Get-ChildItem -LiteralPath $pkg -Recurse -File -Force |
+            Where-Object {
+              $_.Extension -in @('.pyc','.pyo','.log','.db','.sqlite','.sqlite3') -or
+              $_.Name -match '^playzone\.db(-wal|-shm)?$'
+            } |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+
+          @'
+          PlayZone Manager v0.34.6 — Client Trial
+          =======================================
+
+          دي نسخة تجريبية نظيفة بنفس شكل تسليم العميل، مبنية من main عند v0.34.6.
+
+          قبل التثبيت على جهاز اختبار:
+          - يفضل استخدام جهاز Windows اختبار أو VM.
+          - لو على جهاز سبق تثبيت PlayZone عليه، استخدم Uninstall-PlayZone-Service.bat /RemoveData
+            فقط لو لا تحتاج أي بيانات قديمة على جهاز الاختبار.
+          - فك الضغط بالكامل قبل تشغيل التثبيت.
+
+          التثبيت:
+          1) شغّل Install-PlayZone-Service.bat باستخدام Run as administrator.
+          2) عند أول تثبيت سيطلب تعيين كلمة مرور ROOT لا تقل عن 12 حرف.
+          3) Electron/Chromium وPython Runtime موجودان داخل الحزمة للعمل Offline.
+          4) بعد اكتمال التثبيت افتح PlayZone Manager من اختصار سطح المكتب.
+
+          اختبار العميل المقترح:
+          - تسجيل الدخول وفتح وردية.
+          - بدء جلسة Open ومراقبة العداد ثانية بثانية.
+          - Pause ثم التأكد أن الوقت المحسوب يتوقف فوراً.
+          - Resume والتأكد أن العداد يكمل فوراً.
+          - تغيير عدد الدراعات أثناء الجلسة.
+          - تمديد جلسة محددة الوقت.
+          - إنهاء الجلسة وإصدار الفاتورة والتأكد أن الكارت يتحرر فوراً.
+          - إضافة مصروف ومراجعة دورة الاعتماد.
+          - تجربة طرق الدفع المتاحة.
+          - تصفية الدرج وتسليم الوردية.
+          - إعادة تشغيل الجهاز والتأكد أن الخدمة والتطبيق يعملان بشكل طبيعي.
+          - تجربة Voltra من حساب ROOT لو الجهاز متصل بالأجهزة المطلوبة.
+
+          إزالة نسخة الاختبار:
+          - إزالة البرنامج مع الاحتفاظ بالبيانات:
+              Uninstall-PlayZone-Service.bat
+          - تنظيف جهاز الاختبار بالكامل بما في ذلك البيانات:
+              Uninstall-PlayZone-Service.bat /RemoveData
+
+          Build source:
+          v0.34.6
+          '@ | Set-Content -LiteralPath (Join-Path $pkg 'CLIENT-TRIAL-TEST-AR.txt') -Encoding UTF8
+
+          @"
+          PlayZone Manager Client Trial
+          Version: 0.34.6
+          Source commit: $env:GITHUB_SHA
+          Build time UTC: $([DateTime]::UtcNow.ToString('yyyy-MM-dd HH:mm:ss'))
+          "@ | Set-Content -LiteralPath (Join-Path $pkg 'TRIAL-BUILD.txt') -Encoding UTF8
+
+      - name: Bundle verified Electron runtime
+        shell: pwsh
+        run: |
+          $version = '44.4.5'
+          $name = "electron-v$version-win32-x64.zip"
+          $url = "https://github.com/electron/electron/releases/download/v$version/$name"
+          $expected = '11c395820a5aaa8ebcc0686b476d0ac98a730274ebfbdc8cf5538a7c2815cb5d'
+          $dest = Join-Path $PWD "package\desktop-runtime\$name"
+
+          Get-ChildItem -LiteralPath 'package\desktop-runtime' -Filter 'electron-v*-win32-x64.zip' -File -ErrorAction SilentlyContinue |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+
+          Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $dest
+          $actual = (Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Electron SHA256 mismatch: $actual" }
+
+      - name: Audit final client package
+        shell: pwsh
+        run: |
+          $required = @(
+            'package\Install-PlayZone-Service.bat',
+            'package\Install-PlayZone-Service.ps1',
+            'package\Uninstall-PlayZone-Service.bat',
+            'package\Uninstall-PlayZone-Service.ps1',
+            'package\Bootstrap-Portable.ps1',
+            'package\offline-runtime\python-3.12.6-embed-amd64.zip',
+            'package\desktop-runtime\electron-v44.4.5-win32-x64.zip',
+            'package\frontend\dist\assets\index-v031.js',
+            'package\backend\app\main.py',
+            'package\CLIENT-TRIAL-TEST-AR.txt',
+            'package\TRIAL-BUILD.txt',
+            'package\VERSION.txt'
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path -LiteralPath $path)) { throw "Required client file missing: $path" }
+          }
+
+          if ((Get-Content package\VERSION.txt -Raw).Trim() -ne '0.34.6') {
+            throw 'Packaged version mismatch.'
+          }
+
+          $bad = Get-ChildItem -LiteralPath package -Recurse -Force | Where-Object {
+            $_.Name -in @('__pycache__','.pytest_cache','.git','.github','node_modules') -or
+            $_.Extension -in @('.db','.sqlite','.sqlite3','.log','.pyc','.pyo')
+          }
+          if ($bad) { throw "Unexpected client package content: $($bad.FullName -join ', ')" }
+
+          Write-Host 'CLIENT_TRIAL_PACKAGE_AUDIT_OK'
+
+      - name: Create client trial ZIP
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          $zip = 'out\PlayZone-Manager-v0.34.6-Client-Trial-Full.zip'
+          Compress-Archive -Path package\* -DestinationPath $zip -CompressionLevel Optimal -Force
+          $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $hash | Set-Content "$zip.sha256" -Encoding ASCII
+          Write-Host "CLIENT_TRIAL_SHA256=$hash"
+
+      - name: Upload client trial package
+        uses: actions/upload-artifact@v4
+        with:
+          name: PlayZone-Manager-v0.34.6-Client-Trial-Full
+          path: out/*
+          if-no-files-found: error
+          retention-days: 14
