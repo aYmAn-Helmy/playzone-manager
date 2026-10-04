@@ -260,9 +260,8 @@ jobs:
           print("PRESEEDED_CLIENT_DB_OK")
           '@ | Set-Content (Join-Path $env:RUNNER_TEMP 'preseed_client.py') -Encoding UTF8
 
-          Push-Location backend
+          $env:PYTHONPATH = (Resolve-Path backend).Path
           python (Join-Path $env:RUNNER_TEMP 'preseed_client.py')
-          Pop-Location
 
       - name: Real full Windows installation
         shell: pwsh
