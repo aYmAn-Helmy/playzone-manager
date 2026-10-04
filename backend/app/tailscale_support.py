@@ -19,6 +19,11 @@ class TailscaleSupportError(RuntimeError):
     pass
 
 
+def _remote_support_always_on() -> bool:
+    value = os.getenv("PLAYZONE_REMOTE_SUPPORT_ALWAYS_ON", "0").strip().lower()
+    return value not in {"", "0", "false", "no", "off"}
+
+
 def _creation_flags() -> int:
     return int(getattr(subprocess, "CREATE_NO_WINDOW", 0)) if os.name == "nt" else 0
 
@@ -173,6 +178,7 @@ def get_status() -> dict:
         "hostname": None,
         "version": None,
         "always_on": False,
+        "remote_access_always_on": _remote_support_always_on(),
         "message": None,
         "serve_active": False,
         "serve_target": SERVE_TARGET,
@@ -350,6 +356,10 @@ def enable_remote_access() -> dict:
 
 
 def disable_remote_access() -> dict:
+    if _remote_support_always_on():
+        raise TailscaleSupportError(
+            "Remote Support مضبوط على Always-On بواسطة PlayZone وسيتم تشغيل Tailscale Serve تلقائياً."
+        )
     status = get_status()
     if not status.get("supported"):
         raise TailscaleSupportError("دعم Tailscale متاح في نسخة Windows المحلية فقط.")
@@ -370,26 +380,41 @@ def disable_remote_access() -> dict:
 
 
 def ensure_always_on() -> dict:
-    """Best-effort Tailscale daemon recovery used by the PlayZone service watchdog."""
+    """Recover the Tailscale daemon and, when policy is enabled, PlayZone Serve."""
     if os.name != "nt":
         return get_status()
     exe = _find_tailscale()
     if not exe:
         return get_status()
-    # Keep the Windows daemon automatic and running. Serve itself is persistent
-    # when configured with --bg, so this watchdog intentionally does not enable
-    # it after a ROOT user has explicitly disabled Remote Access.
+
     subprocess.run(["sc.exe", "config", "Tailscale", "start=", "auto"], capture_output=True, creationflags=_creation_flags())
     subprocess.run(
         ["sc.exe", "failure", "Tailscale", "reset=", "86400", "actions=", "restart/5000/restart/15000/restart/30000"],
         capture_output=True,
         creationflags=_creation_flags(),
     )
+    subprocess.run(["sc.exe", "failureflag", "Tailscale", "1"], capture_output=True, creationflags=_creation_flags())
     subprocess.run(["sc.exe", "start", "Tailscale"], capture_output=True, creationflags=_creation_flags())
+
     status = get_status()
     if status.get("installed") and not status.get("connected") and not status.get("needs_login"):
         try:
-            return reconnect()
+            status = reconnect()
         except TailscaleSupportError:
-            return get_status()
+            status = get_status()
+
+    # PlayZone customer installs run with this policy enabled. If Serve is
+    # cleared, crashes, or is manually turned off, the service watchdog
+    # restores private HTTPS access to the local backend automatically.
+    if (
+        _remote_support_always_on()
+        and status.get("installed")
+        and status.get("connected")
+        and not status.get("serve_active")
+    ):
+        try:
+            status = enable_remote_access()
+        except TailscaleSupportError as exc:
+            status = get_status()
+            status["serve_message"] = str(exc)
     return status

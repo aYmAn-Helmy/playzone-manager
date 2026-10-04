@@ -1,6 +1,6 @@
 # PlayZone Manager
 
-Current Windows client baseline: **v0.34.6 Secure Cash Drawer + Desktop Edition**.
+Current Windows client baseline: **v0.34.7 Secure Cash Drawer + Always-On Remote Support + Desktop Edition**.
 
 PlayZone Manager is the cashier/session-management application with embedded Voltra screen-power management and ROOT-only remote support.
 
@@ -16,6 +16,7 @@ PlayZone Manager is the cashier/session-management application with embedded Vol
 - System Logs are available as a separate **ROOT-only** page.
 - ROOT password remains mandatory.
 - Remote support remains available through Tailscale Serve.
+- The PlayZone Windows Service automatically restores Tailscale and private HTTPS Serve if either stops or Serve is cleared.
 - The verified offline Python runtime and dependency wheels are included under `offline-runtime/`.
 - Cash-drawer settlement is admin-password protected; staff expenses remain pending until an ADMIN/ROOT approves or rejects them.
 - Drawer settlement can occur while PlayStation sessions remain active; those sessions continue and are billed into the shift that is open when payment is finalized.
@@ -67,4 +68,4 @@ The application backend is intentionally not exposed on `0.0.0.0:8000`.
 
 ## Railway / historical staging files
 
-The repository still contains earlier Railway/staging support files and historical runtime patches for compatibility and reference. The Windows client source under `backend/` and `frontend/` is now at **v0.34.6**.
+The repository still contains earlier Railway/staging support files and historical runtime patches for compatibility and reference. The Windows client source under `backend/` and `frontend/` is now at **v0.34.7**.
