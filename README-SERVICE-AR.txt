@@ -1,4 +1,4 @@
-﻿PlayZone Manager v0.34.1 - Secure Cash Drawer + Remote Support
+﻿PlayZone Manager v0.34.2 - Secure Cash Drawer + Remote Support
 ===============================================
 
 التشغيل المحلي
