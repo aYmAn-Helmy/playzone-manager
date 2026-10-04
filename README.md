@@ -1,6 +1,6 @@
 # PlayZone Manager
 
-Current Windows client baseline: **v0.34.5 Secure Cash Drawer + Desktop Edition**.
+Current Windows client baseline: **v0.34.6 Secure Cash Drawer + Desktop Edition**.
 
 PlayZone Manager is the cashier/session-management application with embedded Voltra screen-power management and ROOT-only remote support.
 
@@ -67,4 +67,4 @@ The application backend is intentionally not exposed on `0.0.0.0:8000`.
 
 ## Railway / historical staging files
 
-The repository still contains earlier Railway/staging support files and historical runtime patches for compatibility and reference. The Windows client source under `backend/` and `frontend/` is now at **v0.34.5**.
+The repository still contains earlier Railway/staging support files and historical runtime patches for compatibility and reference. The Windows client source under `backend/` and `frontend/` is now at **v0.34.6**.
