@@ -315,7 +315,10 @@ $commonDesktopCandidates = @(
 ) | Where-Object { $_ } | Select-Object -Unique
 
 $desktopShortcuts = @()
-foreach ($folder in @($userDesktopCandidates + $commonDesktopCandidates) | Select-Object -Unique) {
+$desktopFolders = @()
+$desktopFolders += @($userDesktopCandidates)
+$desktopFolders += @($commonDesktopCandidates)
+foreach ($folder in @($desktopFolders | Select-Object -Unique)) {
     $created = New-PlayZoneShortcut $folder
     if ($created) { $desktopShortcuts += $created }
 }
