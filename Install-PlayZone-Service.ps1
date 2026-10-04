@@ -299,19 +299,58 @@ function New-PlayZoneShortcut([string]$Folder) {
     }
 }
 
-# Resolve both the real logged-in desktop (including redirected/OneDrive desktops)
-# and the all-users desktop. At least one verified desktop shortcut is mandatory.
+# Resolve the actual interactive Windows user's profile even when the installer
+# is elevated with a different Administrator account. This avoids creating the
+# customer shortcut only on the administrator's Desktop.
+$interactiveDesktopCandidates = @()
+try {
+    $explorer = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction Stop | Select-Object -First 1
+    if ($explorer) {
+        $owner = Invoke-CimMethod -InputObject $explorer -MethodName GetOwner -ErrorAction Stop
+        if ($owner -and $owner.User) {
+            $accountName = if ($owner.Domain) { "$($owner.Domain)\$($owner.User)" } else { $owner.User }
+            try {
+                $sid = (New-Object System.Security.Principal.NTAccount($accountName)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+                $profile = Get-CimInstance Win32_UserProfile -Filter "SID='$sid'" -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($profile -and $profile.LocalPath) {
+                    $interactiveDesktopCandidates += (Join-Path $profile.LocalPath 'Desktop')
+                    $interactiveDesktopCandidates += (Join-Path $profile.LocalPath 'OneDrive\Desktop')
+
+                    # Honor redirected Desktop known-folder configuration for the interactive user.
+                    $desktopReg = "Registry::HKEY_USERS\$sid\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders"
+                    try {
+                        $rawDesktop = (Get-ItemProperty -LiteralPath $desktopReg -Name Desktop -ErrorAction Stop).Desktop
+                        if ($rawDesktop) {
+                            $expandedDesktop = [Environment]::ExpandEnvironmentVariables(
+                                $rawDesktop.Replace('%USERPROFILE%', $profile.LocalPath)
+                            )
+                            $interactiveDesktopCandidates += $expandedDesktop
+                        }
+                    } catch { }
+                }
+            } catch {
+                Write-Warning "Could not resolve interactive user profile for $accountName. $($_.Exception.Message)"
+            }
+        }
+    }
+} catch {
+    Write-Warning "Could not inspect the interactive Explorer session. $($_.Exception.Message)"
+}
+
+# Also keep the current/elevated account locations as fallbacks.
 $userDesktopCandidates = @(
-    $WshShell.SpecialFolders.Item('Desktop'),
-    [Environment]::GetFolderPath('DesktopDirectory'),
-    $(if ($env:USERPROFILE) { Join-Path $env:USERPROFILE 'Desktop' }),
-    $(if ($env:OneDrive) { Join-Path $env:OneDrive 'Desktop' }),
+    $interactiveDesktopCandidates
+    $WshShell.SpecialFolders.Item('Desktop')
+    [Environment]::GetFolderPath('DesktopDirectory')
+    $(if ($env:USERPROFILE) { Join-Path $env:USERPROFILE 'Desktop' })
+    $(if ($env:OneDrive) { Join-Path $env:OneDrive 'Desktop' })
     $(if ($env:OneDriveConsumer) { Join-Path $env:OneDriveConsumer 'Desktop' })
 ) | Where-Object { $_ } | Select-Object -Unique
 
 $commonDesktopCandidates = @(
     $WshShell.SpecialFolders.Item('AllUsersDesktop'),
-    [Environment]::GetFolderPath('CommonDesktopDirectory')
+    [Environment]::GetFolderPath('CommonDesktopDirectory'),
+    (Join-Path $env:PUBLIC 'Desktop')
 ) | Where-Object { $_ } | Select-Object -Unique
 
 $desktopShortcuts = @()
@@ -372,20 +411,28 @@ try {
 if (-not $tcpOk) { Fail 'Voltra TCP 10086 is not listening. Check service.log before using the system.' }
 
 if (-not $NonInteractive) {
-    Step 'Opening PlayZone Manager Desktop independently'
-    # Delegate launch to the Windows shell so the desktop process is not tied
-    # to this elevated installer terminal. Closing CMD/PowerShell must not close PlayZone.
+    Step 'Opening PlayZone Manager independently from the installer console'
+    # Launch the verified .lnk through the Windows shell. Explorer owns the new
+    # desktop process, so closing this installer CMD/PowerShell window cannot
+    # terminate PlayZone Manager.
     $launched = $false
     try {
-        $ShellApplication = New-Object -ComObject Shell.Application
-        $ShellApplication.ShellExecute($DesktopExe, ('"' + $DesktopShell + '"'), $DesktopRuntime, 'open', 1)
+        Start-Process -FilePath "$env:WINDIR\explorer.exe" -ArgumentList @('"' + $PrimaryDesktopShortcut + '"')
         $launched = $true
     } catch {
-        Write-Warning "Windows shell launch failed; using detached cmd start fallback. $($_.Exception.Message)"
+        Write-Warning "Explorer shortcut launch failed. $($_.Exception.Message)"
     }
     if (-not $launched) {
-        $cmdLine = 'start "" "' + $DesktopExe + '" "' + $DesktopShell + '"'
-        Start-Process -FilePath $env:ComSpec -ArgumentList @('/d','/c',$cmdLine) -WindowStyle Hidden
+        try {
+            $ShellApplication = New-Object -ComObject Shell.Application
+            $ShellApplication.ShellExecute($PrimaryDesktopShortcut, '', '', 'open', 1)
+            $launched = $true
+        } catch {
+            Write-Warning "Windows Shell shortcut launch failed. $($_.Exception.Message)"
+        }
+    }
+    if (-not $launched) {
+        Write-Warning 'PlayZone Manager was installed successfully but could not be auto-opened. Use the PlayZone Manager desktop shortcut.'
     }
 }
 
