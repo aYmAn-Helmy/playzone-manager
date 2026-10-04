@@ -538,7 +538,22 @@ jobs:
             await page.getByRole('heading', { name: 'تفعيل الموظف' }).waitFor();
             await page.getByRole('button', { name: 'تأكيد التفعيل' }).click();
 
-            // Voltra must be a clickable internal page, not a dead iframe.
+            // Voltra is intentionally ROOT-only. Switch this installed Electron
+            // session to ROOT, then exercise the real internal Voltra navigation.
+            await page.evaluate(async () => {
+              const r = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: 'root', password: 'Root-Acceptance-123!' })
+              });
+              if (!r.ok) throw new Error('ROOT login failed before Voltra UI test: ' + await r.text());
+              const data = await r.json();
+              localStorage.setItem('playzone_token', data.token);
+              location.href = '/';
+            });
+            await page.waitForLoadState('domcontentloaded');
+            await page.getByText('Root / مالك النظام', { exact: true }).waitFor({ timeout: 15000 });
+
             const clickedVoltraNav = await page.evaluate(() => {
               const buttons = [...document.querySelectorAll('button')];
               const target = buttons.find(el => (el.textContent || '').includes('Voltra'));
