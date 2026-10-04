@@ -139,7 +139,7 @@ jobs:
             await row.getByRole('button', { name: 'إعادة تعيين كلمة المرور' }).click();
             await page.getByRole('heading', { name: /إعادة تعيين كلمة المرور - staff-ui-test/ }).waitFor();
             await page.getByLabel('كلمة المرور الجديدة').fill('New-Staff-Password-123!');
-            await page.getByRole('button', { name: 'تعيين كلمة المرور' }).click();
+            await page.locator('.modal').getByRole('button', { name: 'تعيين كلمة المرور', exact: true }).click();
             await page.waitForFunction(() => {
               const row = [...document.querySelectorAll('tr')].find(r => r.innerText.includes('staff-ui-test'));
               return row && row.innerText.includes('مطلوب تغيير كلمة المرور');
