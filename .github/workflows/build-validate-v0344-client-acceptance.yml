@@ -592,6 +592,7 @@ jobs:
           });
           '@ | Set-Content (Join-Path $env:RUNNER_TEMP 'installed_electron_acceptance.cjs') -Encoding UTF8
 
+          $env:NODE_PATH = (Join-Path $PWD 'node_modules')
           node (Join-Path $env:RUNNER_TEMP 'installed_electron_acceptance.cjs')
 
       - name: Real uninstall preserves client data
