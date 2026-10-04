@@ -171,7 +171,7 @@ jobs:
                   f"/api/shifts/{shift1['id']}/movements/{expense['id']}/decision",
                   headers=h1,
                   json={"decision": "APPROVE", "admin_username": "admin", "admin_password": "wrong"},
-              ), 401, "reject wrong admin password")
+              ), 403, "reject wrong admin password")
               with SessionLocal() as db:
                   assert db.get(CashMovement, expense["id"]).approval_status == "PENDING"
 
