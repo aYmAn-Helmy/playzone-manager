@@ -67,3 +67,11 @@ Desktop Edition v0.32
 - PlayZone Manager.exe يستخدم Chromium مدمجاً عبر Electron 44.4.5.
 - أول تثبيت يحتاج إنترنت لتنزيل runtime الرسمي إذا لم يتم وضع electron-v44.4.5-win32-x64.zip داخل desktop-runtime بجوار الـInstaller.
 - بعد التثبيت لا يعتمد البرنامج على Edge أو Chrome.
+
+إزالة البرنامج
+------------
+- شغّل Uninstall-PlayZone-Service.bat باستخدام Run as administrator.
+- ملف الـUninstall موجود في حزمة العميل، ويُنسخ أيضاً إلى C:\Program Files\PlayZone Manager أثناء التثبيت.
+- الإزالة العادية تحتفظ بقاعدة البيانات والـBackups داخل ProgramData.
+- للحذف الكامل للبيانات شغّل: Uninstall-PlayZone-Service.bat /RemoveData
+
