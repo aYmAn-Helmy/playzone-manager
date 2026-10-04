@@ -108,49 +108,80 @@ jobs:
             await page.getByRole('button', { name: 'دخول' }).click();
             await page.getByText('PlayZone', { exact: true }).waitFor({ timeout: 15000 });
 
-            // Reproduce start without an open cashier shift.
+            // All roles must see that a cashier shift is required before station actions.
+            await page.getByText('لا توجد وردية مفتوحة', { exact: true }).waitFor();
+            const startButton = page.getByRole('button', { name: 'بدء جلسة' }).first();
+            if (!(await startButton.isDisabled())) {
+              throw new Error('Start session is enabled without an open shift');
+            }
+
+            // Open the shift from the real UI, then start a session from the real modal.
+            await page.getByRole('button', { name: 'فتح وردية', exact: true }).click();
+            await page.getByRole('heading', { name: 'فتح وردية' }).waitFor();
+            await page.getByRole('button', { name: 'فتح الوردية' }).click();
+            await page.getByText('وردية مفتوحة', { exact: true }).waitFor({ timeout: 15000 });
+
             await page.getByRole('button', { name: 'بدء جلسة' }).first().click();
             await page.getByRole('heading', { name: /بدء جلسة/ }).waitFor();
             await page.getByRole('button', { name: 'تأكيد البدء' }).click();
-            await page.waitForTimeout(800);
-
-            const errorText = await page.locator('.error-banner, .top-error, .error, [role="alert"]').allTextContents().catch(() => []);
-            const body = await page.locator('body').innerText();
-            console.log('START_WITHOUT_SHIFT_BODY_HAS_ERROR=' + body.includes('يجب فتح وردية كاشير أولاً'));
-
-            // Open the admin shift directly, then retry the exact modal action.
-            await page.evaluate(async () => {
-              const token = localStorage.getItem('playzone_token');
-              const r = await fetch('/api/shifts/open', {
-                method: 'POST',
-                headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ opening_cash_piasters: 0 }),
-              });
-              if (!r.ok) throw new Error(await r.text());
-            });
-
-            // close stale modal and reopen
-            const cancel = page.getByRole('button', { name: 'إلغاء' });
-            if (await cancel.isVisible().catch(() => false)) await cancel.click();
-            await page.getByRole('button', { name: 'بدء جلسة' }).first().click();
-            await page.getByRole('button', { name: 'تأكيد البدء' }).click();
             await page.waitForFunction(() => document.body.innerText.includes('إنهاء الجلسة'), null, { timeout: 15000 });
-            console.log('START_WITH_SHIFT_OK');
+            console.log('SESSION_START_UI_OK');
 
-            // Users page. Navigation itself is unrelated to these row-action diagnostics.
+            // Navigate to employee accounts; navigation positioning is unrelated to row action behavior.
             const usersNav = page.getByRole('button', { name: 'الموظفين', exact: true });
             await usersNav.evaluate(el => el.click());
             await page.getByRole('heading', { name: 'حسابات الموظفين' }).waitFor();
-            const row = page.locator('tr', { hasText: 'staff-ui-test' });
+
+            let row = page.locator('tr', { hasText: 'staff-ui-test' });
             await row.waitFor();
 
-            await row.getByRole('button', { name: 'تعطيل' }).click();
+            // Password reset now uses an in-app modal, not window.prompt.
+            await row.getByRole('button', { name: 'إعادة تعيين كلمة المرور' }).click();
+            await page.getByRole('heading', { name: /إعادة تعيين كلمة المرور - staff-ui-test/ }).waitFor();
+            await page.getByLabel('كلمة المرور الجديدة').fill('New-Staff-Password-123!');
+            await page.getByRole('button', { name: 'تعيين كلمة المرور' }).click();
             await page.waitForFunction(() => {
-              const rows = [...document.querySelectorAll('tr')];
-              const row = rows.find(r => r.innerText.includes('staff-ui-test'));
+              const row = [...document.querySelectorAll('tr')].find(r => r.innerText.includes('staff-ui-test'));
+              return row && row.innerText.includes('مطلوب تغيير كلمة المرور');
+            }, null, { timeout: 15000 });
+
+            const resetState = await page.evaluate(async () => {
+              const token = localStorage.getItem('playzone_token');
+              const users = await fetch('/api/users', { headers: { Authorization: 'Bearer ' + token } }).then(r => r.json());
+              const u = users.find(x => x.username === 'staff-ui-test');
+              return { active: u?.is_active, must: u?.must_change_password };
+            });
+            if (!resetState.active || !resetState.must) throw new Error('Password reset did not persist');
+            console.log('EMPLOYEE_RESET_UI_OK');
+
+            // Disable uses an in-app confirmation modal and must persist.
+            row = page.locator('tr', { hasText: 'staff-ui-test' });
+            await row.getByRole('button', { name: 'تعطيل' }).click();
+            await page.getByRole('heading', { name: 'تعطيل الموظف' }).waitFor();
+            await page.getByRole('button', { name: 'تأكيد التعطيل' }).click();
+            await page.waitForFunction(() => {
+              const row = [...document.querySelectorAll('tr')].find(r => r.innerText.includes('staff-ui-test'));
               return row && row.innerText.includes('معطل');
             }, null, { timeout: 15000 });
-            console.log('DISABLE_OK');
+
+            const disabledState = await page.evaluate(async () => {
+              const token = localStorage.getItem('playzone_token');
+              const users = await fetch('/api/users', { headers: { Authorization: 'Bearer ' + token } }).then(r => r.json());
+              return users.find(x => x.username === 'staff-ui-test')?.is_active;
+            });
+            if (disabledState !== false) throw new Error('Employee disable did not persist');
+            console.log('EMPLOYEE_DISABLE_UI_OK');
+
+            // Re-enable too, proving both directions of the action.
+            row = page.locator('tr', { hasText: 'staff-ui-test' });
+            await row.getByRole('button', { name: 'تفعيل' }).click();
+            await page.getByRole('heading', { name: 'تفعيل الموظف' }).waitFor();
+            await page.getByRole('button', { name: 'تأكيد التفعيل' }).click();
+            await page.waitForFunction(() => {
+              const row = [...document.querySelectorAll('tr')].find(r => r.innerText.includes('staff-ui-test'));
+              return row && row.innerText.includes('نشط');
+            }, null, { timeout: 15000 });
+            console.log('EMPLOYEE_ENABLE_UI_OK');
 
             await app.close();
           })().catch(err => {
