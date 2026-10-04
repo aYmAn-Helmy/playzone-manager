@@ -1,4 +1,4 @@
-PlayZone Manager v0.34.3 — Secure Cash Drawer
+PlayZone Manager v0.34.4 — Client Acceptance
 ================================================
 
 - الموظف يفتح وردية واحدة فقط للدرج وتبدأ برصيد نظامي صفر.
@@ -50,6 +50,13 @@ PlayZone Manager v0.34.3 — Secure Cash Drawer
 - تعطيل/تفعيل الموظف أصبح من Modal تأكيد داخلي، مع منع تعطيل الحساب المستخدم حالياً من الواجهة.
 - تم اختبار Reset Password وDisable وEnable تفاعلياً داخل Electron والتحقق من النتيجة من الـAPI.
 - تم تغيير Cache Key للـFrontend لضمان عدم تشغيل JavaScript قديم بعد Upgrade.
+
+نسخة Client Acceptance v0.34.4
+------------------------------
+- إخفاء رصيد الدرج نهائياً من بطاقة "وردية مفتوحة"؛ البطاقة تعرض الحالة واسم الموظف فقط.
+- تثبيت آخر إصلاحات بدء الجلسة وإدارة الموظفين وVoltra والـSidebar والـScrollbars.
+- هذه النسخة مخصصة لاختبار قبول العميل النهائي وتُبنى كحزمة Offline كاملة مع Electron وPython Runtime وملفات Install/Uninstall.
+- Build الإصدار يمر على اختبارات Backend وElectron UI وVoltra وOffline Runtime بالإضافة إلى تجربة تثبيت Windows Service ثم Uninstall.
 
 ملاحظات تشغيلية
 ---------------
