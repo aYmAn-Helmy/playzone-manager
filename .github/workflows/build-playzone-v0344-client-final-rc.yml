@@ -553,6 +553,17 @@ jobs:
             await page.getByRole('button', { name: 'إنهاء وإصدار الفاتورة' }).click();
             await page.waitForTimeout(700);
 
+            // Close the generated invoice modal before interacting with the page behind it.
+            const invoiceBackdrop = page.locator('.modal-backdrop').last();
+            if (await invoiceBackdrop.isVisible().catch(() => false)) {
+              const closeInvoice = invoiceBackdrop.getByRole('button', { name: 'إغلاق', exact: true });
+              if (await closeInvoice.isVisible().catch(() => false)) {
+                await closeInvoice.click();
+              } else {
+                await page.keyboard.press('Escape');
+              }
+            }
+
             // Employee password reset + disable + enable from real internal modals.
             const usersNav = page.getByRole('button', { name: 'الموظفين', exact: true });
             await usersNav.evaluate(el => el.click());
