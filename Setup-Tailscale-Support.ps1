@@ -30,7 +30,7 @@ if (-not $exe) {
     throw 'Tailscale is not installed. Install Tailscale first, then run this setup again.'
 }
 
-Write-Host 'PlayZone Manager v0.31 - Tailscale Remote Support Setup' -ForegroundColor Cyan
+Write-Host 'PlayZone Manager v0.34.7 - Tailscale Remote Support Setup' -ForegroundColor Cyan
 Write-Host 'The PlayZone backend remains bound to 127.0.0.1:8000.'
 Write-Host 'This script enables private Tailscale Serve only; it does not enable Funnel.'
 
@@ -79,6 +79,6 @@ try {
 } catch { }
 
 Write-Host ''
-Write-Host 'Remote Support is available only inside the tailnet and remains active after restart.' -ForegroundColor Green
-Write-Host 'To disable it later, use the ROOT page or run: tailscale serve --https=443 off'
+Write-Host 'Remote Support is available only inside the tailnet and is kept active automatically by the PlayZone Windows Service.' -ForegroundColor Green
+Write-Host 'If Tailscale or Serve stops, PlayZone checks and restores it automatically.' -ForegroundColor Green
 Read-Host 'Press Enter to close'
