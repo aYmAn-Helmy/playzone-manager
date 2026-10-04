@@ -108,7 +108,14 @@ Copy-Item -LiteralPath (Join-Path $SourceRoot 'Bootstrap-Portable.ps1') -Destina
 Copy-Item -LiteralPath (Join-Path $SourceRoot 'Launch-PlayZone.ps1') -Destination $InstallRoot -Force
 Copy-Item -LiteralPath (Join-Path $SourceRoot 'VERSION.txt') -Destination $InstallRoot -Force
 Copy-Item -LiteralPath (Join-Path $SourceRoot 'PlayStation.ico') -Destination $InstallRoot -Force
-foreach ($optionalFile in @('Uninstall-PlayZone-Service.ps1','Uninstall-PlayZone-Service.bat','Setup-Tailscale-Support.ps1','Setup-Tailscale-Support.bat','Setup-Root-Password.ps1','Setup-Root-Password.bat','REMOTE-SUPPORT-SETUP-AR.txt','TAILSCALE-GRANTS-EXAMPLE.json')) {
+foreach ($optionalFile in @(
+    'Uninstall-PlayZone-Service.ps1','Uninstall-PlayZone-Service.bat',
+    'Setup-Tailscale-Support.ps1','Setup-Tailscale-Support.bat',
+    'Setup-Root-Password.ps1','Setup-Root-Password.bat',
+    'Install-nourxplay.bat','Uninstall-nourxplay.bat',
+    'Setup-nourxplay-Remote-Support.bat','Setup-nourxplay-Root-Password.bat',
+    'README-NOURXPLAY-AR.txt','REMOTE-SUPPORT-SETUP-AR.txt','TAILSCALE-GRANTS-EXAMPLE.json'
+)) {
     $src = Join-Path $SourceRoot $optionalFile
     if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination $InstallRoot -Force }
 }
@@ -253,7 +260,7 @@ if (Test-Path -LiteralPath $BundledElectron) {
         Invoke-WebRequest -UseBasicParsing -Uri $ElectronUrl -OutFile $TempElectron
         $ElectronZip = $TempElectron
     } catch {
-        Fail "Could not download the desktop browser runtime. Internet is required once during v0.34.5 installation unless $ElectronArchive is placed inside a desktop-runtime folder beside the installer. $($_.Exception.Message)"
+        Fail "Could not download the desktop browser runtime. Internet is required once during nourxplay installation unless $ElectronArchive is placed inside a desktop-runtime folder beside the installer. $($_.Exception.Message)"
     }
 }
 
@@ -358,6 +365,18 @@ $desktopShortcuts = @()
 $desktopFolders = @()
 $desktopFolders += @($userDesktopCandidates)
 $desktopFolders += @($commonDesktopCandidates)
+
+# Remove legacy branded shortcuts during upgrade so customers see only nourxplay.
+$legacyShortcutFolders = @(
+    $desktopFolders
+    [Environment]::GetFolderPath('CommonPrograms')
+    [Environment]::GetFolderPath('CommonStartup')
+    [Environment]::GetFolderPath('Programs')
+    [Environment]::GetFolderPath('Startup')
+) | Where-Object { $_ } | Select-Object -Unique
+foreach ($folder in $legacyShortcutFolders) {
+    Remove-Item -LiteralPath (Join-Path $folder 'PlayZone Manager.lnk') -Force -ErrorAction SilentlyContinue
+}
 foreach ($folder in @($desktopFolders | Select-Object -Unique)) {
     $created = New-PlayZoneShortcut $folder
     if ($created) { $desktopShortcuts += $created }
