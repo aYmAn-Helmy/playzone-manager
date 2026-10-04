@@ -27,7 +27,7 @@ jobs:
           foreach ($needle in @(
             "Get-CimInstance Win32_Process -Filter ""Name='explorer.exe'""",
             'Win32_UserProfile',
-            "Join-Path $env:PUBLIC 'Desktop'",
+            "Join-Path \$env:PUBLIC 'Desktop'",
             '$PrimaryDesktopShortcut',
             'explorer.exe'
           )) {
