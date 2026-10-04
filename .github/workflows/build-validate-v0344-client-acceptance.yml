@@ -539,8 +539,15 @@ jobs:
             await page.getByRole('button', { name: 'تأكيد التفعيل' }).click();
 
             // Voltra must be a clickable internal page, not a dead iframe.
-            const voltraNav = page.getByRole('button', { name: /الطاقة.*Voltra/ });
-            await voltraNav.evaluate(el => el.click());
+            const clickedVoltraNav = await page.evaluate(() => {
+              const buttons = [...document.querySelectorAll('button')];
+              const target = buttons.find(el => (el.textContent || '').includes('Voltra'));
+              if (!target) return false;
+              target.click();
+              return true;
+            });
+            if (!clickedVoltraNav) throw new Error('Voltra navigation button was not found in the rendered UI');
+            await page.getByText('ربط أجهزة PlayStation بمخارج Voltra').waitFor({ timeout: 15000 });
             const voltraButton = page.getByRole('link', { name: 'لوحة Voltra' });
             await voltraButton.click();
             await page.waitForURL(/\/voltra-console$/);
