@@ -1,4 +1,4 @@
-﻿PlayZone Manager v0.34.6 - Secure Cash Drawer + Remote Support
+﻿PlayZone Manager v0.34.7 - Secure Cash Drawer + Remote Support
 ===============================================
 
 التشغيل المحلي
@@ -15,7 +15,7 @@ Windows Boot -> PlayZoneManager Service -> Local Web http://127.0.0.1:8000
 - Voltra TCP 10086 + Internal API 8086
 - Local Web 127.0.0.1:8000
 - Windows Service يبدأ تلقائياً مع Windows
-- Tailscale Remote Support اختياري عبر Private Serve
+- Tailscale Remote Support عبر Private Serve مع Always-On Recovery
 - Cloud Sync: Disabled
 
 التثبيت
@@ -32,6 +32,8 @@ Remote Support
 - شغّل Setup-Tailscale-Support.bat كمسؤول.
 - PlayZone يظل على 127.0.0.1:8000 ولا يتم فتح Port Forwarding.
 - Tailscale Serve يعرض الواجهة داخل الـTailnet فقط عبر HTTPS.
+- Windows Service يفحص Tailscale وServe تلقائياً ويعيد تشغيلهما إذا توقفا، بدون تدخل المستخدم.
+- بعد الربط الأول للجهاز بالـTailnet لا يحتاج العميل للضغط على Enable Remote Access مرة أخرى.
 - لا تستخدم Tailscale Funnel.
 - تفاصيل ACL/Tag موجودة في REMOTE-SUPPORT-SETUP-AR.txt.
 
