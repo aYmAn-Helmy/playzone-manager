@@ -78,6 +78,9 @@ def _configure_environment() -> Path:
     os.environ.setdefault("VOLTRA_POLL_INTERVAL", "10")
     os.environ.setdefault("VOLTRA_RESPONSE_TIMEOUT", "3")
     os.environ.setdefault("PLAYZONE_CLOUD_SYNC_ENABLED", "0")
+    # Customer installations keep private Tailscale Serve available without
+    # requiring a user to open PlayZone or press Enable Remote Access.
+    os.environ.setdefault("PLAYZONE_REMOTE_SUPPORT_ALWAYS_ON", "1")
     return data
 
 
@@ -144,7 +147,14 @@ class PlayZoneManagerService(win32serviceutil.ServiceFramework):
                 while win32event.WaitForSingleObject(self.stop_event, 60000) != win32event.WAIT_OBJECT_0:
                     try:
                         status = ensure_always_on()
-                        logging.info("Tailscale watchdog: installed=%s connected=%s always_on=%s", status.get("installed"), status.get("connected"), status.get("always_on"))
+                        logging.info(
+                            "Tailscale watchdog: installed=%s connected=%s daemon_always_on=%s serve_active=%s remote_policy=%s",
+                            status.get("installed"),
+                            status.get("connected"),
+                            status.get("always_on"),
+                            status.get("serve_active"),
+                            status.get("remote_access_always_on"),
+                        )
                     except Exception:
                         logging.exception("Tailscale watchdog recovery failed")
 
