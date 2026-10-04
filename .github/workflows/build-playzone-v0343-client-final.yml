@@ -1,0 +1,402 @@
+name: Build PlayZone Manager v0.34.3 Client Final
+
+on:
+  push:
+    branches:
+      - build/playzone-v0343-client-final
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    env:
+      VOLTRA_DEMO: "1"
+      VOLTRA_HTTP_PORT: "38086"
+      VOLTRA_TCP_PORT: "38087"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate source and product identity
+        shell: pwsh
+        run: |
+          python -m py_compile backend/app/main.py backend/app/services.py backend/app/models.py backend/app/schemas.py backend/app/db.py backend/app/windows_service.py backend/app/embedded_voltra.py backend/voltra_local/dashboard.py
+          node --check frontend/dist/assets/index-v031.js
+          node --check frontend/dist/playzone-responsive.js
+          node --check desktop-shell/main.js
+
+          $version = (Get-Content VERSION.txt -Raw).Trim()
+          if ($version -ne '0.34.3') { throw "Unexpected VERSION.txt: $version" }
+
+          $backend = Get-Content backend/app/main.py -Raw
+          $services = Get-Content backend/app/services.py -Raw
+          $models = Get-Content backend/app/models.py -Raw
+          $frontend = Get-Content frontend/dist/assets/index-v031.js -Raw
+          $responsive = Get-Content frontend/dist/playzone-responsive.js -Raw
+          $responsiveCss = Get-Content frontend/dist/playzone-responsive.css -Raw
+          $dashboard = Get-Content backend/voltra_local/dashboard.py -Raw
+          $index = Get-Content frontend/dist/index.html -Raw
+          $desktop = Get-Content desktop-shell/package.json -Raw
+
+          if (-not $backend.Contains('version="0.34.3"')) { throw 'Backend version is not 0.34.3.' }
+          if (-not $desktop.Contains('"version": "0.34.3"')) { throw 'Desktop version is not 0.34.3.' }
+
+          if (-not $backend.Contains('/api/shifts/{shift_id}/handoff')) { throw 'Shift handoff API missing.' }
+          if (-not $backend.Contains('drawer_settlements')) { throw 'Drawer settlement report missing.' }
+          if (-not $models.Contains('class DrawerSettlement')) { throw 'DrawerSettlement model missing.' }
+          if (-not $models.Contains('class ShiftHandoff')) { throw 'ShiftHandoff model missing.' }
+          if ($services.Contains('Cannot close the drawer while any session is active')) { throw 'Live-session settlement is incorrectly blocked.' }
+          if (-not $frontend.Contains('تسليم الوردية لموظف آخر')) { throw 'Shift handoff UI missing.' }
+          if (-not $frontend.Contains('تسلسل تصفية الدرج وإقفال الورديات')) { throw 'Sequential settlement report UI missing.' }
+          if (-not $frontend.Contains('الجلسات المفتوحة تظل شغالة')) { throw 'Live-session settlement guidance missing.' }
+          if (-not $frontend.Contains('Ge=!!x;')) { throw 'Session actions are not gated by an open shift.' }
+          if (-not $frontend.Contains('إعادة تعيين كلمة المرور -')) { throw 'Internal employee password reset modal missing.' }
+          if (-not $frontend.Contains('تأكيد التعطيل')) { throw 'Internal employee disable confirmation missing.' }
+          if ($frontend.Contains('prompt(`كلمة المرور الجديدة')) { throw 'Legacy Electron-incompatible password prompt still present.' }
+          if (-not $frontend.Contains('نشط — مطلوب تغيير كلمة المرور')) { throw 'Password reset status indicator missing.' }
+
+          if (-not $dashboard.Contains("localStorage.getItem('playzone_token')")) { throw 'Voltra PlayZone token bridge missing.' }
+          if (-not $dashboard.Contains('/api/root/voltra-console')) { throw 'Voltra ROOT proxy missing.' }
+
+          if (-not $responsiveCss.Contains('#pz-left-scroll-track')) { throw 'Main left scrollbar missing.' }
+          if (-not $responsiveCss.Contains('*:not(html):not(body)::-webkit-scrollbar')) { throw 'Global internal scrollbar skin missing.' }
+          if (-not $responsiveCss.Contains('.sidebar.pz-auto-sidebar>nav{flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important')) { throw 'Short-screen sidebar scrolling missing.' }
+          if (-not $index.Contains('0343-actions')) { throw 'v0.34.3 frontend cache bust missing.' }
+          if (-not (Test-Path 'Uninstall-PlayZone-Service.bat')) { throw 'Customer uninstall BAT missing.' }
+          if (-not (Test-Path 'offline-runtime\wheels\typing_inspection-0.4.4-py3-none-any.whl')) { throw 'typing_inspection source wheel missing.' }
+
+          $all = $backend + $services + $models + $frontend + $responsive + $responsiveCss + $dashboard
+          if ($all -match 'abo_aYmAn|abo-ayman-logo|abo-addon') { throw 'Unexpected abo_aYmAn branding.' }
+          if (Test-Path backend/app/drinks.py) { throw 'Unexpected drinks module.' }
+          if ($frontend -match '/api/drinks|المشاريب') { throw 'Unexpected drinks UI.' }
+
+          foreach ($file in @('Install-PlayZone-Service.ps1','Launch-PlayZone.ps1','Uninstall-PlayZone-Service.ps1','Setup-Root-Password.ps1','Setup-Tailscale-Support.ps1')) {
+            if (-not (Test-Path -LiteralPath $file)) { continue }
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($file,[ref]$tokens,[ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) { throw "$file has PowerShell syntax errors: $($errors[0].Message)" }
+          }
+
+      - name: Install backend validation dependencies
+        shell: pwsh
+        run: python -m pip install -r backend/requirements.txt
+
+      - name: Client workflow smoke test
+        shell: pwsh
+        run: |
+          $env:PLAYZONE_DB_PATH = Join-Path $env:RUNNER_TEMP 'playzone-client-final-smoke.db'
+          @'
+          from fastapi.testclient import TestClient
+          from sqlalchemy import select
+
+          from app.main import app
+          from app.db import SessionLocal
+          from app.models import DrawerSettlement, PlaySession, ShiftHandoff, User
+          from app.activation import ACTIVATION_HASH_KEY, machine_hash, set_setting
+          from app.security import hash_password
+
+          ADMIN_PASSWORD = "Client-Final-Admin-123!"
+          STAFF_PASSWORD = "Client-Final-Staff-123!"
+
+          def must(response, code, label):
+              if response.status_code != code:
+                  raise AssertionError(f"{label}: expected {code}, got {response.status_code}: {response.text}")
+              return response
+
+          with TestClient(app) as client:
+              with SessionLocal() as db:
+                  set_setting(db, ACTIVATION_HASH_KEY, machine_hash())
+                  admin = db.scalar(select(User).where(User.username == "admin"))
+                  admin.password_hash = hash_password(ADMIN_PASSWORD)
+                  admin.must_change_password = False
+                  admin.is_active = True
+
+                  for username, display in (("client-cashier-1", "Client Cashier 1"), ("client-cashier-2", "Client Cashier 2")):
+                      row = db.scalar(select(User).where(User.username == username))
+                      if row is None:
+                          row = User(
+                              username=username,
+                              display_name=display,
+                              password_hash=hash_password(STAFF_PASSWORD),
+                              role="STAFF",
+                              must_change_password=False,
+                              is_active=True,
+                          )
+                          db.add(row)
+                      else:
+                          row.password_hash = hash_password(STAFF_PASSWORD)
+                          row.must_change_password = False
+                          row.is_active = True
+                  db.commit()
+
+              def login(username, password):
+                  return must(client.post("/api/auth/login", json={"username": username, "password": password}), 200, f"login {username}").json()["token"]
+
+              token1 = login("client-cashier-1", STAFF_PASSWORD)
+              token2 = login("client-cashier-2", STAFF_PASSWORD)
+              admin_token = login("admin", ADMIN_PASSWORD)
+              h1 = {"Authorization": f"Bearer {token1}"}
+              h2 = {"Authorization": f"Bearer {token2}"}
+              ha = {"Authorization": f"Bearer {admin_token}"}
+
+              shift1 = must(client.post("/api/shifts/open", headers=h1, json={"opening_cash_piasters": 0}), 200, "open shift 1").json()
+
+              stations = must(client.get("/api/stations", headers=h1), 200, "stations").json()
+              station_id = stations[0]["id"]
+              session = must(
+                  client.post(
+                      f"/api/stations/{station_id}/sessions/start",
+                      headers=h1,
+                      json={"session_type": "OPEN", "duration_seconds": None, "controller_count": 2},
+                  ),
+                  200,
+                  "start live session",
+              ).json()
+              live_id = session["id"]
+
+              must(
+                  client.post(
+                      f"/api/shifts/{shift1['id']}/close",
+                      headers=h1,
+                      json={
+                          "actual_cash_piasters": 0,
+                          "admin_username": "admin",
+                          "admin_password": ADMIN_PASSWORD,
+                      },
+                  ),
+                  200,
+                  "settle with live session",
+              )
+
+              with SessionLocal() as db:
+                  live = db.get(PlaySession, live_id)
+                  assert live is not None and live.status in ("RUNNING", "PAUSED", "EXPIRED")
+                  settlement = db.scalar(select(DrawerSettlement).where(DrawerSettlement.shift_id == shift1["id"]))
+                  assert settlement is not None and settlement.active_sessions_at_close >= 1
+
+              shift2 = must(client.post("/api/shifts/open", headers=h2, json={"opening_cash_piasters": 0}), 200, "open shift 2").json()
+              candidates = must(client.get(f"/api/shifts/{shift2['id']}/handoff-candidates", headers=h2), 200, "handoff candidates").json()
+              incoming = next(row for row in candidates if row["username"] == "client-cashier-1")
+
+              must(
+                  client.post(
+                      f"/api/shifts/{shift2['id']}/handoff",
+                      headers=h2,
+                      json={"to_user_id": incoming["id"], "password": "wrong-password"},
+                  ),
+                  401,
+                  "reject wrong receiver password",
+              )
+              handoff = must(
+                  client.post(
+                      f"/api/shifts/{shift2['id']}/handoff",
+                      headers=h2,
+                      json={"to_user_id": incoming["id"], "password": STAFF_PASSWORD},
+                  ),
+                  200,
+                  "accept receiver password",
+              ).json()
+              assert handoff["username"] == "client-cashier-1"
+              assert handoff["shift"]["id"] == shift2["id"]
+              assert handoff["token"]
+
+              new_h1 = {"Authorization": f"Bearer {handoff['token']}"}
+              old_receiver = client.get("/api/shifts/current", headers=h1)
+              assert old_receiver.status_code in (401, 403)
+              old_outgoing = client.get("/api/shifts/current", headers=h2)
+              assert old_outgoing.status_code in (401, 403)
+              current = must(client.get("/api/shifts/current", headers=new_h1), 200, "new owner current shift").json()
+              assert current["username"] == "client-cashier-1"
+
+              with SessionLocal() as db:
+                  assert db.scalar(select(ShiftHandoff).where(ShiftHandoff.shift_id == shift2["id"])) is not None
+
+              report = must(client.get("/api/reports/summary", headers=ha), 200, "reports").json()
+              assert report["drawer_settlements"]
+              assert report["drawer_settlements"][0]["shift_id"] == shift1["id"]
+              assert any(row["shift_id"] == shift2["id"] for row in report["shift_handoffs"])
+
+          print("CLIENT_FINAL_SMOKE_OK")
+          '@ | Set-Content backend\client_final_smoke.py -Encoding UTF8
+
+          Push-Location backend
+          python client_final_smoke.py
+          Pop-Location
+
+      - name: Prepare clean client package
+        shell: pwsh
+        run: |
+          $pkg = Join-Path $PWD 'package'
+          New-Item -ItemType Directory -Force -Path $pkg | Out-Null
+
+          foreach ($dir in @('backend','frontend','offline-runtime','desktop-shell','desktop-runtime')) {
+            Copy-Item -LiteralPath $dir -Destination (Join-Path $pkg $dir) -Recurse -Force
+          }
+
+          # Never ship validation residue, caches, local databases, logs, or source-control metadata.
+          Get-ChildItem -LiteralPath $pkg -Recurse -Directory -Force |
+            Where-Object { $_.Name -in @('__pycache__','.pytest_cache','.git','.github','node_modules') } |
+            Sort-Object FullName -Descending |
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+          Get-ChildItem -LiteralPath $pkg -Recurse -File -Force |
+            Where-Object {
+              $_.Extension -in @('.pyc','.pyo','.log') -or
+              $_.Name -eq 'client_final_smoke.py' -or
+              $_.Extension -in @('.db','.sqlite','.sqlite3')
+            } |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+
+          # Critical regression guard: "inspection" contains "spec", so broad
+          # test/spec filename filters must never be used here.
+          if (-not (Test-Path 'package\offline-runtime\wheels\typing_inspection-0.4.4-py3-none-any.whl')) {
+            throw 'typing_inspection wheel was removed during package cleanup.'
+          }
+
+          $rootFiles = @(
+            'Bootstrap-Portable.ps1',
+            'Install-PlayZone-Service.bat',
+            'Install-PlayZone-Service.ps1',
+            'Launch-PlayZone.ps1',
+            'Uninstall-PlayZone-Service.bat',
+            'Uninstall-PlayZone-Service.ps1',
+            'Setup-Root-Password.bat',
+            'Setup-Root-Password.ps1',
+            'Setup-Tailscale-Support.bat',
+            'Setup-Tailscale-Support.ps1',
+            'REMOTE-SUPPORT-SETUP-AR.txt',
+            'TAILSCALE-GRANTS-EXAMPLE.json',
+            'PlayStation.ico',
+            'README-SERVICE-AR.txt',
+            'CHANGES-v0.34-AR.txt',
+            'DESKTOP-RUNTIME-AR.txt',
+            'VERSION.txt'
+          )
+          foreach ($file in $rootFiles) {
+            if (Test-Path -LiteralPath $file) {
+              Copy-Item -LiteralPath $file -Destination $pkg -Force
+            }
+          }
+
+          @'
+          PlayZone Manager v0.34.3 — Client Final
+          =======================================
+
+          هذه حزمة العميل الكاملة لاختبار القبول النهائي.
+
+          التثبيت / التحديث:
+          1) فك الضغط بالكامل في مجلد محلي.
+          2) يفضل أخذ Backup من داخل PlayZone قبل أي Upgrade.
+          3) شغّل Install-PlayZone-Service.bat باستخدام Run as administrator.
+          4) بعد انتهاء التثبيت افتح PlayZone Manager من الاختصار.
+          5) لا تحذف مجلد secure-data أو قاعدة البيانات أثناء التحديث.
+
+          Checklist مقترح:
+          - بدون وردية: تأكد أن زر بدء الجلسة غير متاح وأن تنبيه فتح الوردية ظاهر لكل الحسابات.
+          - افتح وردية ثم اضغط بدء جلسة > تأكيد البدء وتأكد أن الجلسة تبدأ فعلياً.
+          - من الموظفين: أعد تعيين كلمة مرور موظف وتأكد أن الحالة تصبح "مطلوب تغيير كلمة المرور".
+          - جرّب تعطيل الموظف ثم تفعيله من نوافذ التأكيد الداخلية.
+          - فتح وردية موظف والتأكد أن البداية = صفر.
+          - تسجيل مصروف والتأكد أنه يظل Pending حتى باسورد المدير.
+          - اعتماد/رفض المصروف بباسورد ADMIN/ROOT.
+          - تشغيل جلسة ثم تصفية الدرج والتأكد أن الجلسة تستمر.
+          - فتح وردية جديدة بعد التصفية.
+          - تسليم الوردية لموظف آخر؛ الموظف المستلم يكتب باسورده بنفسه.
+          - التأكد أن الحساب يتحول للموظف الجديد بعد التسليم.
+          - مراجعة Reports > تسلسل تصفية الدرج وإقفال الورديات.
+          - مراجعة سجل تسليم الورديات.
+          - تجربة Voltra بالكامل من داخل PlayZone.
+          - تجربة Sidebar على شاشة قصيرة والتأكد من الوصول لكل عناصر القائمة بالـScroll.
+          - مراجعة Scrollbars الداخلية في الجداول والقوائم.
+
+          ملاحظات:
+          - المنتج والاختصار يظلان باسم PlayZone Manager.
+          - لا توجد صفحة مشاريب في هذه النسخة.
+          - Electron/Chromium الرسمي مرفق للعمل Offline.
+          - لإزالة البرنامج شغّل Uninstall-PlayZone-Service.bat كمسؤول؛ الإزالة العادية تحتفظ بقاعدة البيانات والـBackups.
+          '@ | Set-Content -LiteralPath (Join-Path $pkg 'CLIENT-ACCEPTANCE-TEST-AR.txt') -Encoding UTF8
+
+      - name: Rehearse packaged offline Python install
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\Bootstrap-Portable.ps1 -PayloadRoot package\offline-runtime
+          if ($LASTEXITCODE -ne 0) { throw "Packaged offline bootstrap failed: $LASTEXITCODE" }
+
+          $python = Join-Path $PWD 'package\.runtime\python\python.exe'
+          if (-not (Test-Path -LiteralPath $python)) { throw 'Packaged Python runtime was not created.' }
+          & $python -c "import fastapi,uvicorn,sqlalchemy,pydantic,httpx,argon2,tzdata,win32serviceutil,typing_inspection; print('CLIENT_FINAL_OFFLINE_RUNTIME_OK')"
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged offline runtime import verification failed.' }
+
+          Remove-Item -LiteralPath 'package\.runtime' -Recurse -Force
+          Remove-Item -LiteralPath 'package\Bootstrap-Portable.log' -Force -ErrorAction SilentlyContinue
+
+      - name: Bundle verified Electron runtime
+        shell: pwsh
+        run: |
+          $version = '44.4.5'
+          $name = "electron-v$version-win32-x64.zip"
+          $url = "https://github.com/electron/electron/releases/download/v$version/$name"
+          $expected = '11c395820a5aaa8ebcc0686b476d0ac98a730274ebfbdc8cf5538a7c2815cb5d'
+          $dest = Join-Path $PWD "package\desktop-runtime\$name"
+
+          if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Force }
+          Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $dest
+          $actual = (Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Electron SHA256 mismatch: $actual" }
+
+      - name: Audit final client package
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'package\Install-PlayZone-Service.bat')) { throw 'Installer missing.' }
+          if (-not (Test-Path 'package\Uninstall-PlayZone-Service.bat')) { throw 'Uninstall BAT missing.' }
+          if (-not (Test-Path 'package\Uninstall-PlayZone-Service.ps1')) { throw 'Uninstall PS1 missing.' }
+          if (-not (Test-Path 'package\offline-runtime\wheels\typing_inspection-0.4.4-py3-none-any.whl')) { throw 'typing_inspection missing from final package.' }
+          if (-not (Test-Path 'package\offline-runtime')) { throw 'Offline runtime missing.' }
+          if (-not (Test-Path 'package\desktop-runtime\electron-v44.4.5-win32-x64.zip')) { throw 'Electron runtime missing.' }
+          if ((Get-Content 'package\VERSION.txt' -Raw).Trim() -ne '0.34.3') { throw 'Packaged version mismatch.' }
+          if (Test-Path 'package\backend\app\drinks.py') { throw 'drinks.py unexpectedly packaged.' }
+
+          $badNames = Get-ChildItem -LiteralPath package -Recurse -Force | Where-Object {
+            $_.Name -match 'abo_aYmAn|abo-ayman|abo-addon|client_final_smoke|__pycache__|\.github'
+          }
+          if ($badNames) { throw "Unexpected package content: $($badNames.FullName -join ', ')" }
+
+          $dbFiles = Get-ChildItem -LiteralPath package -Recurse -File | Where-Object {
+            $_.Extension -in @('.db','.sqlite','.sqlite3')
+          }
+          if ($dbFiles) { throw "Database file unexpectedly packaged: $($dbFiles.FullName -join ', ')" }
+
+          $backend = Get-Content 'package\backend\app\main.py' -Raw
+          $frontend = Get-Content 'package\frontend\dist\assets\index-v031.js' -Raw
+          $css = Get-Content 'package\frontend\dist\playzone-responsive.css' -Raw
+          if (-not $backend.Contains('/api/shifts/{shift_id}/handoff')) { throw 'Packaged handoff API missing.' }
+          if (-not $frontend.Contains('تسليم الوردية لموظف آخر')) { throw 'Packaged handoff UI missing.' }
+          if (-not $frontend.Contains('تسلسل تصفية الدرج وإقفال الورديات')) { throw 'Packaged settlement report UI missing.' }
+          if (-not $frontend.Contains('Ge=!!x;')) { throw 'Packaged session shift gating missing.' }
+          if (-not $frontend.Contains('إعادة تعيين كلمة المرور -')) { throw 'Packaged employee reset modal missing.' }
+          if (-not $frontend.Contains('تأكيد التعطيل')) { throw 'Packaged employee disable modal missing.' }
+          if (-not $css.Contains('.sidebar.pz-auto-sidebar>nav{flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important')) { throw 'Packaged sidebar scroll fix missing.' }
+
+      - name: Create client ZIP
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          $zip = 'out\PlayZone-Manager-v0.34.3-Client-Final.zip'
+          Compress-Archive -Path package\* -DestinationPath $zip -CompressionLevel Optimal -Force
+          $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $hash | Set-Content "$zip.sha256" -Encoding ASCII
+          Write-Host "CLIENT_ZIP_SHA256=$hash"
+
+      - name: Upload client final package
+        uses: actions/upload-artifact@v4
+        with:
+          name: PlayZone-Manager-v0.34.3-Client-Final
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
