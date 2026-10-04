@@ -562,7 +562,7 @@ jobs:
               return true;
             });
             if (!clickedVoltraNav) throw new Error('Voltra navigation button was not found in the rendered UI');
-            await page.getByText('ربط أجهزة PlayStation بمخارج Voltra').waitFor({ timeout: 15000 });
+            await page.getByRole('heading', { name: 'إدارة الطاقة' }).waitFor({ timeout: 15000 });
             const voltraButton = page.getByRole('link', { name: 'لوحة Voltra' });
             await voltraButton.click();
             await page.waitForURL(/\/voltra-console$/);
