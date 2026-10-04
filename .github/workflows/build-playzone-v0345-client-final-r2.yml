@@ -1,0 +1,760 @@
+name: Build PlayZone Manager v0.34.5 Client Final
+
+on:
+  push:
+    branches:
+      - build/playzone-v0345-client-final-r2
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-release-test:
+    runs-on: windows-latest
+    timeout-minutes: 55
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Source syntax and release identity
+        shell: pwsh
+        run: |
+          python -m py_compile backend/app/main.py backend/app/services.py backend/app/models.py backend/app/schemas.py backend/app/db.py backend/app/windows_service.py backend/app/embedded_voltra.py backend/voltra_local/dashboard.py backend/app/root_setup.py
+          node --check frontend/dist/assets/index-v031.js
+          node --check frontend/dist/playzone-responsive.js
+          node --check desktop-shell/main.js
+
+          $version = (Get-Content VERSION.txt -Raw).Trim()
+          if ($version -ne '0.34.5') { throw "Unexpected VERSION.txt: $version" }
+
+          $backend = Get-Content backend/app/main.py -Raw
+          $services = Get-Content backend/app/services.py -Raw
+          $models = Get-Content backend/app/models.py -Raw
+          $frontend = Get-Content frontend/dist/assets/index-v031.js -Raw
+          $responsive = Get-Content frontend/dist/playzone-responsive.js -Raw
+          $responsiveCss = Get-Content frontend/dist/playzone-responsive.css -Raw
+          $dashboard = Get-Content backend/voltra_local/dashboard.py -Raw
+          $index = Get-Content frontend/dist/index.html -Raw
+          $desktop = Get-Content desktop-shell/package.json -Raw
+          $installer = Get-Content Install-PlayZone-Service.ps1 -Raw
+
+          if (-not $backend.Contains('version="0.34.5"')) { throw 'Backend version is not 0.34.5.' }
+          if (-not $desktop.Contains('"version": "0.34.5"')) { throw 'Desktop version is not 0.34.5.' }
+          if (-not $installer.Contains('PlayZone Manager v0.34.5')) { throw 'Installer version is not 0.34.5.' }
+          if (-not $index.Contains('0345-shortcut')) { throw 'Frontend cache key is not v0.34.5 final.' }
+          if (-not $installer.Contains("SpecialFolders.Item('Desktop')")) { throw 'Desktop shortcut resolution missing.' }
+          if (-not $installer.Contains("SpecialFolders.Item('AllUsersDesktop')")) { throw 'All-users Desktop shortcut fallback missing.' }
+          if (-not $installer.Contains('Win32_UserProfile')) { throw 'Interactive Windows user profile resolution missing.' }
+          if (-not $installer.Contains("Name='explorer.exe'")) { throw 'Interactive Explorer owner detection missing.' }
+          if (-not $installer.Contains("Join-Path $env:PUBLIC 'Desktop'")) { throw 'Explicit Public Desktop fallback missing.' }
+          if (-not $installer.Contains('Could not create a verified PlayZone Manager shortcut')) { throw 'Shortcut verification guard missing.' }
+          if (-not $installer.Contains('explorer.exe')) { throw 'Explorer detached shortcut launch missing.' }
+          if (-not $installer.Contains('Shell.Application')) { throw 'Windows Shell fallback launch missing.' }
+          if (-not $installer.Contains('Get-Sha256Hex')) { throw '.NET SHA256 compatibility helper missing.' }
+          if ($installer.Contains('Get-FileHash -LiteralPath $ElectronZip')) { throw 'Installer still depends on Get-FileHash for Electron verification.' }
+
+          if (-not $backend.Contains('/api/shifts/{shift_id}/handoff')) { throw 'Shift handoff API missing.' }
+          if (-not $backend.Contains('drawer_settlements')) { throw 'Drawer settlement reporting missing.' }
+          if (-not $models.Contains('class DrawerSettlement')) { throw 'DrawerSettlement model missing.' }
+          if (-not $models.Contains('class ShiftHandoff')) { throw 'ShiftHandoff model missing.' }
+          if ($services.Contains('Cannot close the drawer while any session is active')) { throw 'Live-session drawer settlement is incorrectly blocked.' }
+
+          if (-not $frontend.Contains('Ge=!!x;')) { throw 'Session start is not gated by an open shift.' }
+          if (-not $frontend.Contains('إعادة تعيين كلمة المرور -')) { throw 'Internal password-reset modal missing.' }
+          if (-not $frontend.Contains('تأكيد التعطيل')) { throw 'Employee disable confirmation missing.' }
+          if (-not $frontend.Contains('تسليم الوردية لموظف آخر')) { throw 'Shift handoff UI missing.' }
+          if (-not $frontend.Contains('تسلسل تصفية الدرج وإقفال الورديات')) { throw 'Sequential settlement report UI missing.' }
+          if ($frontend.Contains('prompt(`كلمة المرور الجديدة')) { throw 'Legacy Electron-incompatible password prompt still present.' }
+
+          $shiftChipStart = $frontend.IndexOf('function lt({shift:e,onOpen:t,onManage:n})')
+          if ($shiftChipStart -lt 0) { throw 'Shift chip component missing.' }
+          $shiftChip = $frontend.Substring($shiftChipStart, [Math]::Min(1000, $frontend.Length - $shiftChipStart))
+          if ($shiftChip.Contains('رصيد الدرج') -or $shiftChip.Contains('expected_cash_piasters')) {
+            throw 'Open-shift chip still exposes drawer money.'
+          }
+
+          if (-not $dashboard.Contains("localStorage.getItem('playzone_token')")) { throw 'Voltra PlayZone token bridge missing.' }
+          if (-not $dashboard.Contains('/api/root/voltra-console')) { throw 'Voltra internal ROOT proxy missing.' }
+
+          if (-not $responsiveCss.Contains('#pz-left-scroll-track')) { throw 'Main left scrollbar missing.' }
+          if (-not $responsiveCss.Contains('*:not(html):not(body)::-webkit-scrollbar')) { throw 'Global scrollbar skin missing.' }
+          if (-not $responsiveCss.Contains('.sidebar.pz-auto-sidebar>nav{flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important')) { throw 'Sidebar short-screen scrolling missing.' }
+
+          if (-not (Test-Path 'Uninstall-PlayZone-Service.bat')) { throw 'Uninstall BAT missing.' }
+          if (-not (Test-Path 'Uninstall-PlayZone-Service.ps1')) { throw 'Uninstall PS1 missing.' }
+          if (-not (Test-Path 'offline-runtime\wheels\typing_inspection-0.4.4-py3-none-any.whl')) { throw 'typing_inspection wheel missing.' }
+
+          $all = $backend + $services + $models + $frontend + $responsive + $responsiveCss + $dashboard
+          if ($all -match 'abo_aYmAn|abo-ayman-logo|abo-addon') { throw 'Unexpected legacy branding.' }
+          if (Test-Path backend/app/drinks.py) { throw 'Unexpected drinks module.' }
+          if ($frontend -match '/api/drinks|المشاريب') { throw 'Unexpected drinks UI.' }
+
+          foreach ($file in @('Bootstrap-Portable.ps1','Install-PlayZone-Service.ps1','Launch-PlayZone.ps1','Uninstall-PlayZone-Service.ps1','Setup-Root-Password.ps1','Setup-Tailscale-Support.ps1')) {
+            if (-not (Test-Path -LiteralPath $file)) { continue }
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($file,[ref]$tokens,[ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) { throw "$file has PowerShell syntax errors: $($errors[0].Message)" }
+          }
+
+      - name: Install test dependencies
+        shell: pwsh
+        run: |
+          python -m pip install -r backend/requirements.txt
+          npm install --no-save playwright-core@1.55.0
+
+      - name: Backend security and business-flow integration test
+        shell: pwsh
+        run: |
+          $env:PLAYZONE_DB_PATH = Join-Path $env:RUNNER_TEMP 'playzone-full-api-test.db'
+          @'
+          from fastapi.testclient import TestClient
+          from sqlalchemy import select
+
+          from app.main import app
+          from app.db import SessionLocal
+          from app.models import CashMovement, DrawerSettlement, PlaySession, ShiftHandoff, User
+          from app.activation import ACTIVATION_HASH_KEY, machine_hash, set_setting
+          from app.security import hash_password
+
+          ADMIN_PASSWORD = "Full-Test-Admin-123!"
+          STAFF_PASSWORD = "Full-Test-Staff-123!"
+
+          def must(response, code, label):
+              if response.status_code != code:
+                  raise AssertionError(f"{label}: expected {code}, got {response.status_code}: {response.text}")
+              return response
+
+          with TestClient(app) as client:
+              with SessionLocal() as db:
+                  set_setting(db, ACTIVATION_HASH_KEY, machine_hash())
+                  admin = db.scalar(select(User).where(User.username == "admin"))
+                  admin.password_hash = hash_password(ADMIN_PASSWORD)
+                  admin.must_change_password = False
+                  admin.is_active = True
+
+                  for username, display in (("full-cashier-1", "Full Cashier 1"), ("full-cashier-2", "Full Cashier 2")):
+                      row = db.scalar(select(User).where(User.username == username))
+                      if row is None:
+                          row = User(
+                              username=username,
+                              display_name=display,
+                              password_hash=hash_password(STAFF_PASSWORD),
+                              role="STAFF",
+                              must_change_password=False,
+                              is_active=True,
+                          )
+                          db.add(row)
+                      else:
+                          row.password_hash = hash_password(STAFF_PASSWORD)
+                          row.must_change_password = False
+                          row.is_active = True
+                  db.commit()
+
+              def login(username, password):
+                  return must(client.post("/api/auth/login", json={"username": username, "password": password}), 200, f"login {username}").json()["token"]
+
+              t1 = login("full-cashier-1", STAFF_PASSWORD)
+              t2 = login("full-cashier-2", STAFF_PASSWORD)
+              ta = login("admin", ADMIN_PASSWORD)
+              h1 = {"Authorization": f"Bearer {t1}"}
+              h2 = {"Authorization": f"Bearer {t2}"}
+              ha = {"Authorization": f"Bearer {ta}"}
+
+              must(client.post("/api/shifts/open", headers=h1, json={"opening_cash_piasters": 5000}), 403, "block staff non-zero opening")
+              shift1 = must(client.post("/api/shifts/open", headers=h1, json={"opening_cash_piasters": 0}), 200, "open shift 1").json()
+              must(client.post("/api/shifts/open", headers=h2, json={"opening_cash_piasters": 0}), 409, "block second drawer shift")
+
+              # Staff expense is pending and does not alter drawer balance until admin approval.
+              expense = must(client.post(
+                  f"/api/shifts/{shift1['id']}/movements",
+                  headers=h1,
+                  json={"movement_type": "CASH_OUT", "amount_piasters": 500, "reason": "test supplies"},
+              ), 200, "create pending expense").json()
+              assert expense["approval_status"] == "PENDING"
+              before = must(client.get(f"/api/shifts/{shift1['id']}", headers=h1), 200, "shift detail before approval").json()
+              assert before["expected_cash_piasters"] == 0
+              assert before["pending_cash_out_piasters"] == 500
+
+              must(client.post(
+                  f"/api/shifts/{shift1['id']}/movements/{expense['id']}/decision",
+                  headers=h1,
+                  json={"decision": "APPROVE", "admin_username": "admin", "admin_password": "wrong"},
+              ), 403, "reject wrong admin password")
+              with SessionLocal() as db:
+                  assert db.get(CashMovement, expense["id"]).approval_status == "PENDING"
+
+              must(client.post(
+                  f"/api/shifts/{shift1['id']}/movements/{expense['id']}/decision",
+                  headers=h1,
+                  json={"decision": "REJECT", "admin_username": "admin", "admin_password": ADMIN_PASSWORD},
+              ), 200, "admin rejects expense")
+
+              stations = must(client.get("/api/stations", headers=h1), 200, "stations").json()
+              station_id = stations[0]["id"]
+              session = must(client.post(
+                  f"/api/stations/{station_id}/sessions/start",
+                  headers=h1,
+                  json={"session_type": "OPEN", "duration_seconds": None, "controller_count": 2},
+              ), 200, "start live session").json()
+
+              must(client.post(f"/api/sessions/{session['id']}/pause", headers=h1), 200, "pause session")
+              must(client.post(f"/api/sessions/{session['id']}/resume", headers=h1), 200, "resume session")
+
+              # Admin can settle drawer while session stays live.
+              closed = must(client.post(
+                  f"/api/shifts/{shift1['id']}/close",
+                  headers=h1,
+                  json={"actual_cash_piasters": 0, "admin_username": "admin", "admin_password": ADMIN_PASSWORD},
+              ), 200, "settle drawer with live session").json()
+              assert closed["status"] == "CLOSED"
+
+              with SessionLocal() as db:
+                  live = db.get(PlaySession, session["id"])
+                  assert live is not None and live.status in ("RUNNING", "PAUSED", "EXPIRED")
+                  settlement = db.scalar(select(DrawerSettlement).where(DrawerSettlement.shift_id == shift1["id"]))
+                  assert settlement is not None and settlement.active_sessions_at_close >= 1
+
+              # Open next shift and hand it off using receiver's own password.
+              shift2 = must(client.post("/api/shifts/open", headers=h2, json={"opening_cash_piasters": 0}), 200, "open next shift").json()
+              candidates = must(client.get(f"/api/shifts/{shift2['id']}/handoff-candidates", headers=h2), 200, "handoff candidates").json()
+              incoming = next(row for row in candidates if row["username"] == "full-cashier-1")
+
+              must(client.post(
+                  f"/api/shifts/{shift2['id']}/handoff",
+                  headers=h2,
+                  json={"to_user_id": incoming["id"], "password": "wrong"},
+              ), 401, "block wrong receiver password")
+
+              handoff = must(client.post(
+                  f"/api/shifts/{shift2['id']}/handoff",
+                  headers=h2,
+                  json={"to_user_id": incoming["id"], "password": STAFF_PASSWORD},
+              ), 200, "handoff shift").json()
+              new_h1 = {"Authorization": f"Bearer {handoff['token']}"}
+              assert must(client.get("/api/shifts/current", headers=new_h1), 200, "new owner current shift").json()["id"] == shift2["id"]
+              assert client.get("/api/shifts/current", headers=h1).status_code in (401, 403)
+              assert client.get("/api/shifts/current", headers=h2).status_code in (401, 403)
+
+              with SessionLocal() as db:
+                  assert db.scalar(select(ShiftHandoff).where(ShiftHandoff.shift_id == shift2["id"])) is not None
+
+              # End the original live session into the currently open shift.
+              invoice = must(client.post(
+                  f"/api/sessions/{session['id']}/end",
+                  headers=new_h1,
+                  json={"payment_method": "CASH", "discount_piasters": 0},
+              ), 200, "end session and issue invoice").json()
+              assert invoice["payment_method"] == "CASH"
+
+              report = must(client.get("/api/reports/summary", headers=ha), 200, "reports").json()
+              assert report["drawer_settlements"]
+              assert any(row["shift_id"] == shift2["id"] for row in report["shift_handoffs"])
+
+          print("FULL_API_FLOW_OK")
+          '@ | Set-Content backend\full_release_api_test.py -Encoding UTF8
+
+          Push-Location backend
+          python full_release_api_test.py
+          Pop-Location
+
+      - name: Prepare clean client package
+        shell: pwsh
+        run: |
+          $pkg = Join-Path $PWD 'package'
+          New-Item -ItemType Directory -Force -Path $pkg | Out-Null
+
+          foreach ($dir in @('backend','frontend','offline-runtime','desktop-shell','desktop-runtime')) {
+            Copy-Item -LiteralPath $dir -Destination (Join-Path $pkg $dir) -Recurse -Force
+          }
+
+          foreach ($file in @(
+            'Bootstrap-Portable.ps1',
+            'Install-PlayZone-Service.bat',
+            'Install-PlayZone-Service.ps1',
+            'Launch-PlayZone.ps1',
+            'Uninstall-PlayZone-Service.bat',
+            'Uninstall-PlayZone-Service.ps1',
+            'Setup-Root-Password.bat',
+            'Setup-Root-Password.ps1',
+            'Setup-Tailscale-Support.bat',
+            'Setup-Tailscale-Support.ps1',
+            'REMOTE-SUPPORT-SETUP-AR.txt',
+            'TAILSCALE-GRANTS-EXAMPLE.json',
+            'PlayStation.ico',
+            'README-SERVICE-AR.txt',
+            'CHANGES-v0.34-AR.txt',
+            'DESKTOP-RUNTIME-AR.txt',
+            'VERSION.txt'
+          )) {
+            if (Test-Path -LiteralPath $file) { Copy-Item -LiteralPath $file -Destination $pkg -Force }
+          }
+
+          Get-ChildItem -LiteralPath $pkg -Recurse -Directory -Force |
+            Where-Object { $_.Name -in @('__pycache__','.pytest_cache','.git','.github','node_modules') } |
+            Sort-Object FullName -Descending |
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+          Get-ChildItem -LiteralPath $pkg -Recurse -File -Force |
+            Where-Object {
+              $_.Extension -in @('.pyc','.pyo','.log','.db','.sqlite','.sqlite3') -or
+              $_.Name -eq 'full_release_api_test.py'
+            } |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+
+          if (-not (Test-Path 'package\offline-runtime\wheels\typing_inspection-0.4.4-py3-none-any.whl')) {
+            throw 'typing_inspection was removed by package cleanup.'
+          }
+
+          @'
+          PlayZone Manager v0.34.5 — Client Final
+          =========================================================
+
+          هذه نسخة كاملة مثل نسخة العميل، للتثبيت والاختبار النهائي على جهاز Windows.
+
+          التثبيت:
+          1) فك الضغط بالكامل.
+          2) شغّل Install-PlayZone-Service.bat باستخدام Run as administrator.
+          3) في أول تثبيت سيطلب تعيين ROOT password إذا لم يكن مُعداً مسبقاً.
+          4) بعد اكتمال التثبيت افتح PlayZone Manager من اختصار سطح المكتب.
+
+          أهم نقاط الاختبار:
+          - بدون وردية: بدء الجلسة غير متاح ويظهر تنبيه فتح الوردية.
+          - فتح وردية ثم بدء جلسة > تأكيد البدء.
+          - إيقاف مؤقت / استئناف / إنهاء وإصدار فاتورة.
+          - بطاقة الوردية المفتوحة تعرض اسم الموظف فقط بدون رصيد الدرج.
+          - زر العين يخفي ويظهر الإيراد اليومي وساعات اللعب.
+          - المصروف يظل Pending حتى اعتماد/رفض المدير بالباسورد.
+          - تصفية الدرج ممكنة مع وجود جلسة شغالة، والجلسة تظل مستمرة.
+          - تسليم الوردية لموظف آخر يتطلب باسورد الموظف المستلم.
+          - تقارير تسلسل إقفالات الدرج وسجل تسليم الورديات.
+          - إعادة تعيين كلمة مرور الموظف من Modal داخلي.
+          - تعطيل الموظف ثم تفعيله.
+          - Voltra تفتح داخلياً ويمكن الضغط على التبويبات.
+          - Sidebar قابل للسكرول في الشاشات القصيرة.
+          - Scrollbars الداخلية بالشكل الموحد.
+          - تأكد أن PlayZone Manager.lnk موجود على Desktop بعد التثبيت.
+          - بعد فتح البرنامج اقفل نافذة CMD/PowerShell الخاصة بالتثبيت وتأكد أن البرنامج لا يغلق.
+          - اقفل البرنامج وافتحه من Shortcut الـDesktop وتأكد أنه يعمل بدون Terminal.
+
+          إزالة البرنامج بعد الاختبار:
+          - شغّل Uninstall-PlayZone-Service.bat كمسؤول.
+          - الإزالة العادية تحذف البرنامج والخدمة وتحتفظ بقاعدة البيانات والـBackups.
+          - للحذف الكامل لكل بيانات الاختبار:
+              Uninstall-PlayZone-Service.bat /RemoveData
+
+          ملاحظات:
+          - Electron/Chromium والـPython Runtime مرفقين بالكامل للعمل Offline.
+          - لا توجد صفحة مشاريب.
+          - المنتج والاختصارات باسم PlayZone Manager فقط.
+          '@ | Set-Content -LiteralPath (Join-Path $pkg 'CLIENT-ACCEPTANCE-TEST-AR.txt') -Encoding UTF8
+
+      - name: Rehearse packaged offline Python runtime
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\Bootstrap-Portable.ps1 -PayloadRoot package\offline-runtime
+          if ($LASTEXITCODE -ne 0) { throw "Offline bootstrap failed: $LASTEXITCODE" }
+          $python = Join-Path $PWD 'package\.runtime\python\python.exe'
+          & $python -c "import fastapi,uvicorn,sqlalchemy,pydantic,httpx,argon2,tzdata,win32serviceutil,typing_inspection; print('OFFLINE_RUNTIME_OK')"
+          if ($LASTEXITCODE -ne 0) { throw 'Offline runtime imports failed.' }
+          Remove-Item -LiteralPath 'package\.runtime' -Recurse -Force
+          Remove-Item -LiteralPath 'package\Bootstrap-Portable.log' -Force -ErrorAction SilentlyContinue
+
+      - name: Bundle and verify Electron runtime
+        shell: pwsh
+        run: |
+          $version = '44.4.5'
+          $name = "electron-v$version-win32-x64.zip"
+          $url = "https://github.com/electron/electron/releases/download/v$version/$name"
+          $expected = '11c395820a5aaa8ebcc0686b476d0ac98a730274ebfbdc8cf5538a7c2815cb5d'
+          $dest = Join-Path $PWD "package\desktop-runtime\$name"
+          if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Force }
+          Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $dest
+          $actual = (Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Electron SHA256 mismatch: $actual" }
+
+      - name: Audit packaged release before installation
+        shell: pwsh
+        run: |
+          $required = @(
+            'package\Install-PlayZone-Service.bat',
+            'package\Install-PlayZone-Service.ps1',
+            'package\Uninstall-PlayZone-Service.bat',
+            'package\Uninstall-PlayZone-Service.ps1',
+            'package\offline-runtime\python-3.12.6-embed-amd64.zip',
+            'package\offline-runtime\wheels\typing_inspection-0.4.4-py3-none-any.whl',
+            'package\desktop-runtime\electron-v44.4.5-win32-x64.zip',
+            'package\VERSION.txt'
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path -LiteralPath $path)) { throw "Required packaged file missing: $path" }
+          }
+          if ((Get-Content package\VERSION.txt -Raw).Trim() -ne '0.34.5') { throw 'Packaged version mismatch.' }
+          if (Test-Path package\backend\app\drinks.py) { throw 'Unexpected drinks module packaged.' }
+
+          $bad = Get-ChildItem package -Recurse -Force | Where-Object {
+            $_.Name -match 'abo_aYmAn|abo-ayman|abo-addon|__pycache__|full_release_api_test|\.github'
+          }
+          if ($bad) { throw "Unexpected package content: $($bad.FullName -join ', ')" }
+
+      - name: Prepare ROOT password for non-interactive fresh install
+        shell: pwsh
+        run: |
+          $dataRoot = Join-Path $env:ProgramData 'PlayZone Manager'
+          if (Test-Path -LiteralPath $dataRoot) { Remove-Item -LiteralPath $dataRoot -Recurse -Force -ErrorAction SilentlyContinue }
+          $installRoot = Join-Path $env:ProgramFiles 'PlayZone Manager'
+          if (Test-Path -LiteralPath $installRoot) { Remove-Item -LiteralPath $installRoot -Recurse -Force -ErrorAction SilentlyContinue }
+          & sc.exe delete PlayZoneManager 2>$null | Out-Null
+          Start-Sleep -Milliseconds 800
+
+          $secure = Join-Path $dataRoot 'secure-data'
+          New-Item -ItemType Directory -Force -Path $secure | Out-Null
+          $env:PLAYZONE_DB_PATH = Join-Path $secure 'playzone.db'
+          Push-Location backend
+          'Root-Final-Test-123!' | python -m app.root_setup set
+          if ($LASTEXITCODE -ne 0) { throw 'Could not preconfigure ROOT password for install test.' }
+          Pop-Location
+
+      - name: Full Windows installation test
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\Install-PlayZone-Service.ps1 -NonInteractive
+          if ($LASTEXITCODE -ne 0) { throw "Installer failed: $LASTEXITCODE" }
+
+          $installRoot = Join-Path $env:ProgramFiles 'PlayZone Manager'
+          $dataRoot = Join-Path $env:ProgramData 'PlayZone Manager'
+
+          foreach ($path in @(
+            (Join-Path $installRoot 'desktop-runtime\PlayZone Manager.exe'),
+            (Join-Path $installRoot '.runtime\python\python.exe'),
+            (Join-Path $installRoot 'Uninstall-PlayZone-Service.bat'),
+            (Join-Path $installRoot 'Uninstall-PlayZone-Service.ps1'),
+            (Join-Path $installRoot 'VERSION.txt'),
+            (Join-Path $dataRoot 'secure-data\playzone.db')
+          )) {
+            if (-not (Test-Path -LiteralPath $path)) { throw "Installed file missing: $path" }
+          }
+
+          $svc = Get-Service PlayZoneManager
+          if ($svc.Status -ne 'Running') { throw "PlayZoneManager service is not running: $($svc.Status)" }
+
+          $health = Invoke-RestMethod -Uri http://127.0.0.1:8000/api/health -TimeoutSec 5
+          if (-not $health.ok) { throw 'Installed backend health check failed.' }
+
+          $ui = Invoke-WebRequest -UseBasicParsing -Uri http://127.0.0.1:8000/ -TimeoutSec 5
+          if ($ui.StatusCode -ne 200 -or $ui.Content.Length -lt 100) { throw 'Installed UI did not load.' }
+
+          $tcp = New-Object Net.Sockets.TcpClient
+          $iar = $tcp.BeginConnect('127.0.0.1',10086,$null,$null)
+          if (-not ($iar.AsyncWaitHandle.WaitOne(3000) -and $tcp.Connected)) { throw 'Installed Voltra TCP listener is not active.' }
+          $tcp.Close()
+
+          Write-Host 'FULL_INSTALL_OK'
+
+      - name: Verify installed desktop shortcut and terminal independence
+        shell: pwsh
+        run: |
+          $installRoot = Join-Path $env:ProgramFiles 'PlayZone Manager'
+          $expectedExe = Join-Path $installRoot 'desktop-runtime\PlayZone Manager.exe'
+          $wsh = New-Object -ComObject WScript.Shell
+          $folders = @(
+            $wsh.SpecialFolders.Item('Desktop'),
+            [Environment]::GetFolderPath('DesktopDirectory'),
+            $wsh.SpecialFolders.Item('AllUsersDesktop'),
+            [Environment]::GetFolderPath('CommonDesktopDirectory')
+          ) | Where-Object { $_ } | Select-Object -Unique
+
+          $links = @()
+          foreach ($folder in $folders) {
+            $candidate = Join-Path $folder 'PlayZone Manager.lnk'
+            if (Test-Path -LiteralPath $candidate) { $links += $candidate }
+          }
+          $links = @($links | Select-Object -Unique)
+          if ($links.Count -lt 1) { throw "No Desktop shortcut found. Folders: $($folders -join '; ')" }
+
+          foreach ($link in $links) {
+            $s = $wsh.CreateShortcut($link)
+            if ($s.TargetPath -ne $expectedExe) {
+              throw "Shortcut target mismatch: $link -> $($s.TargetPath)"
+            }
+            if ($s.Arguments -notmatch 'desktop-shell') { throw "desktop-shell argument missing: $link" }
+            Write-Host "VERIFIED_DESKTOP_SHORTCUT=$link"
+          }
+
+          Stop-Process -Name 'PlayZone Manager' -Force -ErrorAction SilentlyContinue
+          $linkToTest = $links[0]
+
+          # Launch exactly like the fixed installer: through Windows Explorer.
+          $launcher = Start-Process -FilePath "$env:WINDIR\explorer.exe" -ArgumentList @('"' + $linkToTest + '"') -PassThru
+          if ($launcher -and -not $launcher.HasExited) {
+            try { $launcher.WaitForExit(5000) | Out-Null } catch { }
+          }
+          Start-Sleep -Seconds 4
+
+          $desktop = Get-Process -Name 'PlayZone Manager' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $desktop) { throw 'PlayZone desktop did not survive Explorer shortcut launch.' }
+          if ((Get-Service PlayZoneManager).Status -ne 'Running') { throw 'PlayZone service is not running.' }
+          $health = Invoke-RestMethod http://127.0.0.1:8000/api/health -TimeoutSec 5
+          if (-not $health.ok) { throw 'Health check failed after shortcut launch.' }
+          Write-Host "TERMINAL_INDEPENDENCE_OK PID=$($desktop.Id)"
+
+          Stop-Process -Name 'PlayZone Manager' -Force -ErrorAction SilentlyContinue
+
+      - name: Seed installed app for UI acceptance test
+        shell: pwsh
+        run: |
+          Stop-Service PlayZoneManager -Force
+          $installRoot = Join-Path $env:ProgramFiles 'PlayZone Manager'
+          $dataRoot = Join-Path $env:ProgramData 'PlayZone Manager'
+          $python = Join-Path $installRoot '.runtime\python\python.exe'
+          $env:PLAYZONE_DB_PATH = Join-Path $dataRoot 'secure-data\playzone.db'
+
+          @'
+          from sqlalchemy import select
+          from app.db import SessionLocal
+          from app.models import User
+          from app.activation import ACTIVATION_HASH_KEY, machine_hash, set_setting
+          from app.security import hash_password
+
+          with SessionLocal() as db:
+              set_setting(db, ACTIVATION_HASH_KEY, machine_hash())
+              admin = db.scalar(select(User).where(User.username == "admin"))
+              admin.password_hash = hash_password("Admin-Installed-123!")
+              admin.must_change_password = False
+              admin.is_active = True
+
+              staff = db.scalar(select(User).where(User.username == "installed-staff"))
+              if staff is None:
+                  staff = User(
+                      username="installed-staff",
+                      display_name="Installed Staff",
+                      password_hash=hash_password("Staff-Installed-123!"),
+                      role="STAFF",
+                      must_change_password=False,
+                      is_active=True,
+                  )
+                  db.add(staff)
+              else:
+                  staff.password_hash = hash_password("Staff-Installed-123!")
+                  staff.must_change_password = False
+                  staff.is_active = True
+              db.commit()
+          print("INSTALLED_SEED_OK")
+          '@ | Set-Content (Join-Path $env:RUNNER_TEMP 'seed_installed.py') -Encoding UTF8
+
+          & $python (Join-Path $env:RUNNER_TEMP 'seed_installed.py')
+          if ($LASTEXITCODE -ne 0) { throw 'Installed DB seed failed.' }
+          Start-Service PlayZoneManager
+          (Get-Service PlayZoneManager).WaitForStatus('Running',[TimeSpan]::FromSeconds(20))
+
+      - name: Installed Electron end-to-end UI test
+        shell: pwsh
+        run: |
+          @'
+          const { _electron: electron } = require('playwright-core');
+
+          (async () => {
+            const installRoot = process.env.ProgramFiles + '\\PlayZone Manager';
+            const exe = installRoot + '\\desktop-runtime\\PlayZone Manager.exe';
+            const shell = installRoot + '\\desktop-shell';
+
+            const app = await electron.launch({
+              executablePath: exe,
+              args: [shell],
+              env: { ...process.env }
+            });
+            const page = await app.firstWindow();
+
+            await page.getByLabel('اسم المستخدم').fill('admin');
+            await page.getByLabel('كلمة المرور').fill('Admin-Installed-123!');
+            await page.getByRole('button', { name: 'دخول' }).click();
+            await page.getByText('PlayZone', { exact: true }).waitFor({ timeout: 15000 });
+
+            // No shift: session start must be blocked in UI.
+            await page.getByText('لا توجد وردية مفتوحة', { exact: true }).waitFor();
+            const start0 = page.getByRole('button', { name: 'بدء جلسة' }).first();
+            if (!(await start0.isDisabled())) throw new Error('Session start enabled without shift');
+
+            // Privacy eye must mask/unmask revenue and gameplay.
+            const eye = page.locator('.pz-privacy-toggle').first();
+            await eye.click();
+            await page.waitForFunction(() => {
+              const values = [...document.querySelectorAll('.stats .stat strong')].map(x => x.textContent.trim());
+              return values.filter(x => x === '••••••').length >= 2;
+            });
+            await eye.click();
+
+            // Open shift and verify chip privacy.
+            await page.getByRole('button', { name: 'فتح وردية', exact: true }).click();
+            await page.getByRole('heading', { name: 'فتح وردية' }).waitFor();
+            await page.getByRole('button', { name: 'فتح الوردية' }).click();
+            await page.getByText('وردية مفتوحة', { exact: true }).waitFor({ timeout: 15000 });
+
+            const chipText = await page.locator('.shift-chip.open').innerText();
+            if (chipText.includes('رصيد الدرج') || chipText.includes('ج.م')) {
+              throw new Error('Open shift chip exposes money: ' + chipText);
+            }
+
+            // Start / pause / resume / end session.
+            await page.getByRole('button', { name: 'بدء جلسة' }).first().click();
+            await page.getByRole('heading', { name: /بدء جلسة/ }).waitFor();
+            await page.getByRole('button', { name: 'تأكيد البدء' }).click();
+            await page.getByRole('button', { name: 'إنهاء الجلسة' }).first().waitFor({ timeout: 15000 });
+
+            const pause = page.getByRole('button', { name: /إيقاف مؤقت/ }).first();
+            if (await pause.isVisible().catch(() => false)) {
+              await pause.click();
+              await page.waitForTimeout(300);
+              const resume = page.getByRole('button', { name: /استئناف/ }).first();
+              if (await resume.isVisible().catch(() => false)) await resume.click();
+            }
+
+            await page.getByRole('button', { name: 'إنهاء الجلسة' }).first().click();
+            await page.getByRole('heading', { name: /إنهاء الجلسة/ }).waitFor();
+            await page.getByRole('button', { name: 'إنهاء وإصدار الفاتورة' }).click();
+            await page.waitForTimeout(700);
+
+            // Close every visible modal before interacting with the page behind it.
+            for (let guard = 0; guard < 4 && await page.locator('.modal-backdrop').count(); guard++) {
+              const backdrop = page.locator('.modal-backdrop').last();
+              const closeButton = backdrop.locator('button.button.ghost').filter({ hasText: 'إغلاق' }).first();
+              if (await closeButton.count()) {
+                await closeButton.click({ force: true });
+              } else {
+                const xButton = backdrop.locator('.modal-close, .icon-button').first();
+                if (await xButton.count()) await xButton.click({ force: true });
+              }
+              await page.waitForTimeout(150);
+            }
+            if (await page.locator('.modal-backdrop').count()) {
+              throw new Error('A modal remained open before employee tests: ' + await page.locator('.modal-backdrop').last().innerText());
+            }
+
+            // Employee password reset + disable + enable from real internal modals.
+            const usersNav = page.getByRole('button', { name: 'الموظفين', exact: true });
+            await usersNav.evaluate(el => el.click());
+            await page.getByRole('heading', { name: 'حسابات الموظفين' }).waitFor();
+
+            let row = page.locator('tr', { hasText: 'installed-staff' });
+            await row.getByRole('button', { name: 'إعادة تعيين كلمة المرور' }).click();
+            await page.getByRole('heading', { name: /إعادة تعيين كلمة المرور - installed-staff/ }).waitFor();
+            await page.getByLabel('كلمة المرور الجديدة').fill('Reset-Installed-123!');
+            await page.locator('.modal').getByRole('button', { name: 'تعيين كلمة المرور', exact: true }).click();
+            await page.waitForFunction(() => {
+              const row = [...document.querySelectorAll('tr')].find(r => r.innerText.includes('installed-staff'));
+              return row && row.innerText.includes('مطلوب تغيير كلمة المرور');
+            }, null, { timeout: 15000 });
+
+            row = page.locator('tr', { hasText: 'installed-staff' });
+            await row.getByRole('button', { name: 'تعطيل' }).click();
+            await page.getByRole('heading', { name: 'تعطيل الموظف' }).waitFor();
+            await page.getByRole('button', { name: 'تأكيد التعطيل' }).click();
+            await page.waitForFunction(() => {
+              const row = [...document.querySelectorAll('tr')].find(r => r.innerText.includes('installed-staff'));
+              return row && row.innerText.includes('معطل');
+            }, null, { timeout: 15000 });
+
+            row = page.locator('tr', { hasText: 'installed-staff' });
+            await row.getByRole('button', { name: 'تفعيل' }).click();
+            await page.getByRole('heading', { name: 'تفعيل الموظف' }).waitFor();
+            await page.getByRole('button', { name: 'تأكيد التفعيل' }).click();
+
+            // Short viewport: sidebar nav must actually scroll.
+            await page.setViewportSize({ width: 1100, height: 420 });
+            const sidebarScroll = await page.evaluate(() => {
+              const nav = document.querySelector('.sidebar > nav');
+              if (!nav) return null;
+              const style = getComputedStyle(nav);
+              return { overflowY: style.overflowY, clientHeight: nav.clientHeight, scrollHeight: nav.scrollHeight };
+            });
+            if (!sidebarScroll || sidebarScroll.overflowY !== 'auto' || sidebarScroll.scrollHeight <= sidebarScroll.clientHeight) {
+              throw new Error('Sidebar is not scrollable on short viewport: ' + JSON.stringify(sidebarScroll));
+            }
+
+            // Voltra internal page: tab clicks must work inside the same Electron window.
+            await page.goto('http://127.0.0.1:8000/voltra-console', { waitUntil: 'domcontentloaded' });
+            await page.locator('button[data-page="network"]').click();
+            if (!(await page.locator('#page-network').evaluate(el => el.classList.contains('active')))) {
+              throw new Error('Voltra network tab did not activate');
+            }
+            await page.locator('button[data-page="mapping"]').click();
+            if (!(await page.locator('#page-mapping').evaluate(el => el.classList.contains('active')))) {
+              throw new Error('Voltra mapping tab did not activate');
+            }
+
+            console.log('INSTALLED_ELECTRON_E2E_OK');
+            await app.close();
+          })().catch(err => {
+            console.error(err);
+            process.exit(1);
+          });
+          '@ | Set-Content installed-e2e.cjs -Encoding UTF8
+
+          node installed-e2e.cjs
+
+      - name: Verify default uninstall preserves data
+        shell: pwsh
+        run: |
+          $installRoot = Join-Path $env:ProgramFiles 'PlayZone Manager'
+          $dataRoot = Join-Path $env:ProgramData 'PlayZone Manager'
+          $sentinel = Join-Path $dataRoot 'secure-data\UNINSTALL-PRESERVE-SENTINEL.txt'
+          'preserve-me' | Set-Content -LiteralPath $sentinel -Encoding ASCII
+
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $installRoot 'Uninstall-PlayZone-Service.ps1')
+          if ($LASTEXITCODE -ne 0) { throw "Default uninstaller failed: $LASTEXITCODE" }
+
+          Start-Sleep -Milliseconds 1000
+          if (Get-Service PlayZoneManager -ErrorAction SilentlyContinue) { throw 'Service still exists after uninstall.' }
+          if (Test-Path -LiteralPath $installRoot) { throw 'InstallRoot still exists after uninstall.' }
+          if (-not (Test-Path -LiteralPath $dataRoot)) { throw 'Default uninstall removed ProgramData unexpectedly.' }
+          if (-not (Test-Path -LiteralPath $sentinel)) { throw 'Default uninstall did not preserve secure data.' }
+          if (-not (Test-Path -LiteralPath (Join-Path $dataRoot 'secure-data\playzone.db'))) { throw 'Default uninstall removed database.' }
+
+          Write-Host 'DEFAULT_UNINSTALL_PRESERVE_OK'
+
+      - name: Verify full data removal option
+        shell: pwsh
+        run: |
+          $dataRoot = Join-Path $env:ProgramData 'PlayZone Manager'
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\Uninstall-PlayZone-Service.ps1 -RemoveData
+          if ($LASTEXITCODE -ne 0) { throw "RemoveData uninstaller failed: $LASTEXITCODE" }
+          if (Test-Path -LiteralPath $dataRoot) { throw 'ProgramData still exists after -RemoveData.' }
+          Write-Host 'FULL_UNINSTALL_REMOVE_DATA_OK'
+
+      - name: Final package audit
+        shell: pwsh
+        run: |
+          if ((Get-Content package\VERSION.txt -Raw).Trim() -ne '0.34.5') { throw 'Packaged version mismatch.' }
+          if (-not (Test-Path package\CLIENT-ACCEPTANCE-TEST-AR.txt)) { throw 'Acceptance checklist missing.' }
+          if (-not (Test-Path package\Uninstall-PlayZone-Service.bat)) { throw 'Customer uninstaller missing.' }
+          if (-not (Test-Path package\desktop-runtime\electron-v44.4.5-win32-x64.zip)) { throw 'Bundled Electron missing.' }
+          if (-not (Test-Path package\offline-runtime\wheels\typing_inspection-0.4.4-py3-none-any.whl)) { throw 'Offline dependency missing.' }
+          $packagedInstaller = Get-Content package\Install-PlayZone-Service.ps1 -Raw
+          if (-not $packagedInstaller.Contains("SpecialFolders.Item('Desktop')")) { throw 'Packaged Desktop shortcut fix missing.' }
+          if (-not $packagedInstaller.Contains('Win32_UserProfile')) { throw 'Packaged interactive-user shortcut fix missing.' }
+          if (-not $packagedInstaller.Contains("Name='explorer.exe'")) { throw 'Packaged Explorer owner detection missing.' }
+          if (-not $packagedInstaller.Contains('explorer.exe')) { throw 'Packaged detached Explorer launch fix missing.' }
+          if (-not $packagedInstaller.Contains('Shell.Application')) { throw 'Packaged Windows Shell fallback missing.' }
+          if (-not $packagedInstaller.Contains('Get-Sha256Hex')) { throw 'Packaged SHA256 compatibility fix missing.' }
+
+          $dbFiles = Get-ChildItem package -Recurse -File | Where-Object { $_.Extension -in @('.db','.sqlite','.sqlite3') }
+          if ($dbFiles) { throw "Database leaked into package: $($dbFiles.FullName -join ', ')" }
+
+      - name: Create client final ZIP
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          $zip = 'out\PlayZone-Manager-v0.34.5-Client-Final.zip'
+          Compress-Archive -Path package\* -DestinationPath $zip -CompressionLevel Optimal -Force
+          $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $hash | Set-Content "$zip.sha256" -Encoding ASCII
+          Write-Host "CLIENT_ZIP_SHA256=$hash"
+
+      - name: Upload client release candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: PlayZone-Manager-v0.34.5-Client-Final
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
