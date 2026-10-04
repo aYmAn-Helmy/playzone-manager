@@ -10,6 +10,18 @@ $ServiceName = 'PlayZoneManager'
 
 function Step([string]$Text) { Write-Host "`n==> $Text" -ForegroundColor Cyan }
 function Fail([string]$Text) { throw $Text }
+function Get-Sha256Hex([string]$Path) {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $bytes = $sha.ComputeHash($stream)
+        return (($bytes | ForEach-Object { $_.ToString('x2') }) -join '')
+    }
+    finally {
+        $stream.Dispose()
+        $sha.Dispose()
+    }
+}
 
 Write-Host 'PlayZone Manager v0.34.5 - Secure Cash Drawer Edition' -ForegroundColor Green
 Write-Host 'Local backend + private Tailscale Serve support. Cloud Sync is disabled.'
@@ -244,7 +256,7 @@ if (Test-Path -LiteralPath $BundledElectron) {
     }
 }
 
-$actualElectronHash = (Get-FileHash -LiteralPath $ElectronZip -Algorithm SHA256).Hash.ToLowerInvariant()
+$actualElectronHash = Get-Sha256Hex $ElectronZip
 if ($actualElectronHash -ne $ElectronSha256) {
     if ($ElectronZip -eq $CachedElectron) { Remove-Item -LiteralPath $CachedElectron -Force -ErrorAction SilentlyContinue }
     Fail "Electron runtime checksum mismatch. Expected $ElectronSha256 but received $actualElectronHash"
