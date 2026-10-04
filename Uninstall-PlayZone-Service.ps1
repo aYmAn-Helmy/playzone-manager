@@ -12,7 +12,7 @@ $DataRoot = Join-Path $env:ProgramData 'PlayZone Manager'
 function Step([string]$Text) { Write-Host "`n==> $Text" -ForegroundColor Cyan }
 
 Write-Host 'nourxplay - Complete Uninstaller' -ForegroundColor Yellow
-Write-Host 'Removes the PlayZone/nourxplay service, shortcuts, firewall rules and application files.'
+Write-Host 'Removes nourxplay service components, shortcuts, firewall rules and application files.'
 Write-Host 'Tailscale itself is NOT removed unless -RemoveTailscale is explicitly supplied.'
 
 Step 'Stopping and removing Windows service'
