@@ -176,7 +176,7 @@ UI_CONFIG_DEFAULTS: dict[str, bool] = {
     "show_nav_voltra": True,
 }
 
-app = FastAPI(title="nourxplay API", version="0.35.0")
+app = FastAPI(title="nourxplay API", version="0.35.1")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],

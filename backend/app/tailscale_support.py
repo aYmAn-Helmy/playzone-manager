@@ -24,6 +24,11 @@ def _remote_support_always_on() -> bool:
     return value not in {"", "0", "false", "no", "off"}
 
 
+def _headless_enabled() -> bool:
+    value = os.getenv("PLAYZONE_TAILSCALE_HEADLESS", "0").strip().lower()
+    return value not in {"", "0", "false", "no", "off"}
+
+
 def _creation_flags() -> int:
     return int(getattr(subprocess, "CREATE_NO_WINDOW", 0)) if os.name == "nt" else 0
 
@@ -72,6 +77,27 @@ def _support_hostname() -> str:
     raw = socket.gethostname().lower()
     safe = re.sub(r"[^a-z0-9-]+", "-", raw).strip("-") or "windows"
     return f"nourxplay-{safe}"[:63]
+
+
+def _suppress_tray_gui() -> None:
+    if os.name != "nt" or not _headless_enabled():
+        return
+    try:
+        subprocess.run(
+            ["taskkill.exe", "/F", "/IM", "tailscale-ipn.exe"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+            creationflags=_creation_flags(),
+        )
+    except Exception:
+        pass
+    common_startup = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / "Tailscale.lnk"
+    try:
+        common_startup.unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 def _service_state() -> str | None:
@@ -179,6 +205,7 @@ def get_status() -> dict:
         "version": None,
         "always_on": False,
         "remote_access_always_on": _remote_support_always_on(),
+        "headless": _headless_enabled(),
         "message": None,
         "serve_active": False,
         "serve_target": SERVE_TARGET,
@@ -313,9 +340,9 @@ def reconnect() -> dict:
     if not status["supported"]:
         raise TailscaleSupportError("دعم Tailscale متاح في نسخة Windows المحلية فقط.")
     if not status["installed"]:
-        raise TailscaleSupportError("Tailscale غير مثبت. شغّل Setup-Tailscale-Support.bat مرة واحدة كمسؤول.")
+        raise TailscaleSupportError("مكوّن Remote Support غير مثبت. أعد تشغيل Install-nourxplay.bat كمسؤول.")
     if status["needs_login"]:
-        raise TailscaleSupportError("الجهاز غير مسجل في Tailnet. شغّل Setup-Tailscale-Support.bat مرة واحدة كمسؤول.")
+        raise TailscaleSupportError("الجهاز غير مربوط بالـTailnet. استخدم Auth Key من صفحة ROOT مرة واحدة.")
 
     exe = _find_tailscale()
     if not exe:
@@ -387,6 +414,7 @@ def ensure_always_on() -> dict:
     if not exe:
         return get_status()
 
+    _suppress_tray_gui()
     subprocess.run(["sc.exe", "config", "Tailscale", "start=", "auto"], capture_output=True, creationflags=_creation_flags())
     subprocess.run(
         ["sc.exe", "failure", "Tailscale", "reset=", "86400", "actions=", "restart/5000/restart/15000/restart/30000"],
@@ -397,7 +425,11 @@ def ensure_always_on() -> dict:
     subprocess.run(["sc.exe", "start", "Tailscale"], capture_output=True, creationflags=_creation_flags())
 
     status = get_status()
-    if status.get("installed") and not status.get("connected") and not status.get("needs_login"):
+    if (
+        status.get("installed")
+        and not status.get("needs_login")
+        and (not status.get("connected") or not status.get("always_on"))
+    ):
         try:
             status = reconnect()
         except TailscaleSupportError:
@@ -417,4 +449,5 @@ def ensure_always_on() -> dict:
         except TailscaleSupportError as exc:
             status = get_status()
             status["serve_message"] = str(exc)
+    _suppress_tray_gui()
     return status

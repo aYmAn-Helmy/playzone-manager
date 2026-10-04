@@ -15,7 +15,7 @@ Windows Boot -> PlayZoneManager Service -> Local Web http://127.0.0.1:8000
 - Voltra TCP 10086 + Internal API 8086
 - Local Web 127.0.0.1:8000
 - Windows Service يبدأ تلقائياً مع Windows
-- Tailscale Remote Support عبر Private Serve مع Always-On Recovery
+- Tailscale Remote Support مدمج في Installer ويعمل Headless عبر Private Serve مع Always-On Recovery
 - Cloud Sync: Disabled
 
 التثبيت
@@ -28,8 +28,9 @@ Windows Boot -> PlayZoneManager Service -> Local Web http://127.0.0.1:8000
 
 Remote Support
 --------------
-- ثبّت Tailscale على جهاز العميل.
-- شغّل Setup-Tailscale-Support.bat كمسؤول.
+- لا يحتاج العميل لتثبيت أو تشغيل Tailscale يدوياً؛ nourxplay Full Installer يثبت خدمة Tailscale تلقائياً وبشكل Silent.
+- لا يتم تشغيل Tray GUI بجانب الساعة.
+- الربط بالـTailnet يتم مرة واحدة من صفحة ROOT باستخدام Auth Key آمن.
 - nourxplay يظل على 127.0.0.1:8000 ولا يتم فتح Port Forwarding.
 - Tailscale Serve يعرض الواجهة داخل الـTailnet فقط عبر HTTPS.
 - Windows Service يفحص Tailscale وServe تلقائياً ويعيد تشغيلهما إذا توقفا، بدون تدخل المستخدم.

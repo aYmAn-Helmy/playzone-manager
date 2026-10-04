@@ -27,7 +27,7 @@ function Invoke-Tailscale([string[]]$Arguments) {
 
 $exe = Find-Tailscale
 if (-not $exe) {
-    throw 'Tailscale is not installed. Install Tailscale first, then run this setup again.'
+    throw 'Remote Support runtime is missing. Re-run Install-nourxplay.bat as Administrator.'
 }
 
 Write-Host 'nourxplay v0.35.0 - Tailscale Remote Support Setup' -ForegroundColor Cyan
@@ -47,7 +47,7 @@ $up = @('up','--unattended=true','--accept-dns=false','--accept-routes=false',("
 if ($Tag) { $up += "--advertise-tags=$Tag" }
 
 Write-Host "`n[1/3] Connecting this PC to Tailscale..." -ForegroundColor Yellow
-Write-Host 'If Tailscale asks for browser authorization, complete it once.'
+Write-Host 'This compatibility setup can use interactive authorization; normal customer provisioning should use the ROOT Auth Key flow.'
 Invoke-Tailscale $up
 
 Write-Host "`n[2/3] Enabling private HTTPS Remote Support with Tailscale Serve..." -ForegroundColor Yellow

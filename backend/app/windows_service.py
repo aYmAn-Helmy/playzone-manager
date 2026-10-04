@@ -81,6 +81,7 @@ def _configure_environment() -> Path:
     # Customer installations keep private Tailscale Serve available without
     # requiring a user to open nourxplay or press Enable Remote Access.
     os.environ.setdefault("PLAYZONE_REMOTE_SUPPORT_ALWAYS_ON", "1")
+    os.environ.setdefault("PLAYZONE_TAILSCALE_HEADLESS", "1")
     return data
 
 
@@ -175,13 +176,13 @@ class PlayZoneManagerService(win32serviceutil.ServiceFramework):
                 self.server.should_exit = True
             if self.server_thread and self.server_thread.is_alive():
                 self.server_thread.join(timeout=15)
-            logging.info("PlayZone Manager Windows Service stopped")
+            logging.info("nourxplay Windows Service stopped")
         except Exception:
             try:
-                logging.exception("PlayZone Manager service failed")
+                logging.exception("nourxplay service failed")
             except Exception:
                 pass
-            servicemanager.LogErrorMsg("PlayZone Manager service failed; see service.log")
+            servicemanager.LogErrorMsg("nourxplay service failed; see service.log")
             raise
 
 

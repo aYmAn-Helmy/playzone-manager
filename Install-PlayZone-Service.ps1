@@ -1,6 +1,12 @@
 ﻿#Requires -RunAsAdministrator
 param([switch]$NonInteractive)
 
+$TailscaleVersion = '1.102.4'
+$TailscaleMsiName = "tailscale-setup-$TailscaleVersion-amd64.msi"
+$TailscaleRuntimeRoot = Join-Path $PSScriptRoot 'tailscale-runtime'
+$TailscaleMsiUrl = "https://dl.tailscale.com/stable/$TailscaleMsiName"
+$TailscaleShaUrl = "$TailscaleMsiUrl.sha256"
+
 $ErrorActionPreference = 'Stop'
 $SourceRoot = $PSScriptRoot
 $InstallRoot = Join-Path $env:ProgramFiles 'PlayZone Manager'
@@ -23,9 +29,108 @@ function Get-Sha256Hex([string]$Path) {
     }
 }
 
-Write-Host 'nourxplay v0.35.0 - White Label Edition' -ForegroundColor Green
-Write-Host 'Local backend + private Tailscale Serve support. Cloud Sync is disabled.'
-Write-Host 'Python is bundled offline. The installer downloads and verifies the official Electron/Chromium desktop runtime once if it is not bundled beside the installer.'
+function Find-TailscaleExe {
+    $cmd = Get-Command tailscale.exe -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    foreach ($candidate in @(
+        (Join-Path $env:ProgramFiles 'Tailscale\tailscale.exe'),
+        $(if ($env:ProgramFiles -and ${env:ProgramFiles(x86)}) { Join-Path ${env:ProgramFiles(x86)} 'Tailscale\tailscale.exe' })
+    ) | Where-Object { $_ }) {
+        if (Test-Path -LiteralPath $candidate) { return $candidate }
+    }
+    return $null
+}
+
+function Suppress-TailscaleTray {
+    # tailscaled.exe is the Windows service. tailscale-ipn.exe is only the
+    # per-user tray GUI and is not required for unattended Remote Support.
+    Get-Process -Name 'tailscale-ipn' -ErrorAction SilentlyContinue |
+        Stop-Process -Force -ErrorAction SilentlyContinue
+
+    $startupFolders = @(
+        [Environment]::GetFolderPath('CommonStartup'),
+        [Environment]::GetFolderPath('Startup')
+    ) | Where-Object { $_ } | Select-Object -Unique
+    foreach ($folder in $startupFolders) {
+        Remove-Item -LiteralPath (Join-Path $folder 'Tailscale.lnk') -Force -ErrorAction SilentlyContinue
+    }
+
+    # Clean the all-users startup shortcut that current/older Tailscale
+    # installers may create. Keep Start Menu/admin tools installed.
+    if ($env:ProgramData) {
+        Remove-Item -LiteralPath (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\Startup\Tailscale.lnk') -Force -ErrorAction SilentlyContinue
+    }
+
+    foreach ($runKey in @(
+        'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Run',
+        'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run'
+    )) {
+        if (Test-Path -LiteralPath $runKey) {
+            Remove-ItemProperty -LiteralPath $runKey -Name 'Tailscale' -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function Ensure-BundledTailscale {
+    $existingExe = Find-TailscaleExe
+    if ($existingExe) {
+        Write-Host 'Tailscale runtime already installed; keeping the existing installation.' -ForegroundColor Green
+        Suppress-TailscaleTray
+        return $existingExe
+    }
+
+    Step 'Installing private Remote Support runtime'
+    New-Item -ItemType Directory -Force -Path $TailscaleRuntimeRoot | Out-Null
+    $msiPath = Join-Path $TailscaleRuntimeRoot $TailscaleMsiName
+    $shaPath = "$msiPath.sha256"
+
+    if (-not (Test-Path -LiteralPath $msiPath) -or -not (Test-Path -LiteralPath $shaPath)) {
+        Write-Host "Bundled Tailscale runtime is missing; downloading official Tailscale $TailscaleVersion..." -ForegroundColor Yellow
+        try {
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+            Invoke-WebRequest -UseBasicParsing -Uri $TailscaleMsiUrl -OutFile $msiPath
+            Invoke-WebRequest -UseBasicParsing -Uri $TailscaleShaUrl -OutFile $shaPath
+        } catch {
+            Fail "Could not obtain the Tailscale runtime. Use the Full nourxplay package or connect this PC to the internet once. $($_.Exception.Message)"
+        }
+    }
+
+    $checksumText = (Get-Content -LiteralPath $shaPath -Raw).Trim()
+    $match = [regex]::Match($checksumText, '(?i)\b[0-9a-f]{64}\b')
+    if (-not $match.Success) { Fail 'Tailscale checksum file is invalid.' }
+    $expected = $match.Value.ToLowerInvariant()
+    $actual = (Get-Sha256Hex $msiPath).ToLowerInvariant()
+    if ($actual -ne $expected) { Fail "Tailscale MSI checksum mismatch. Expected $expected but received $actual" }
+
+    $signature = Get-AuthenticodeSignature -FilePath $msiPath
+    if ($signature.Status -ne 'Valid') { Fail "Tailscale MSI signature is not valid: $($signature.Status)" }
+    if (-not ($signature.SignerCertificate.Subject -match 'Tailscale')) {
+        Fail "Unexpected Tailscale MSI signer: $($signature.SignerCertificate.Subject)"
+    }
+
+    $arguments = @(
+        '/i', ('"' + $msiPath + '"'),
+        '/qn', '/norestart',
+        'TS_NOLAUNCH=1',
+        'TS_UNATTENDEDMODE=always',
+        'TS_PREFERENCESMENU=hide',
+        'TS_UPDATEMENU=hide',
+        'TS_TESTMENU=hide'
+    )
+    $proc = Start-Process -FilePath 'msiexec.exe' -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden
+    if ($proc.ExitCode -notin @(0,3010)) { Fail "Tailscale silent installation failed with exit code $($proc.ExitCode)" }
+
+    $exe = Find-TailscaleExe
+    if (-not $exe) { Fail 'Tailscale installation completed but tailscale.exe was not found.' }
+
+    Suppress-TailscaleTray
+    Write-Host 'Private Remote Support runtime installed silently (no tray client).' -ForegroundColor Green
+    return $exe
+}
+
+Write-Host 'nourxplay v0.35.1 - Headless Remote Support Edition' -ForegroundColor Green
+Write-Host 'Local backend + private headless Tailscale Serve support. Cloud Sync is disabled.'
+Write-Host 'Python, Electron (Full package) and the Tailscale service runtime are bundled for customer installation.'
 
 Step 'Stopping previous nourxplay service'
 $existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
@@ -41,6 +146,8 @@ $PayloadRoot = Join-Path $SourceRoot 'offline-runtime'
 foreach ($required in @((Join-Path $PayloadRoot 'python-3.12.6-embed-amd64.zip'),(Join-Path $PayloadRoot 'get-pip.py'),(Join-Path $PayloadRoot 'requirements-offline.txt'),(Join-Path $PayloadRoot 'wheels'))) {
     if (-not (Test-Path -LiteralPath $required)) { Fail "Offline installer payload missing: $required" }
 }
+
+$TailscaleExe = Ensure-BundledTailscale
 
 Step 'Preparing installation folders'
 New-Item -ItemType Directory -Force -Path $InstallRoot,$DataRoot,(Join-Path $DataRoot 'logs'),$SecureDataRoot | Out-Null
@@ -167,7 +274,7 @@ if ($rootStatus -eq 3) {
     if ($NonInteractive) {
         Fail 'ROOT password setup is required before a non-interactive installation can continue.'
     }
-    Write-Host 'ROOT password setup is required for nourxplay v0.35.0 White Label Edition.' -ForegroundColor Yellow
+    Write-Host 'ROOT password setup is required for nourxplay v0.35.1 Headless Remote Support Edition.' -ForegroundColor Yellow
     while ($true) {
         $secure1 = Read-Host 'Enter a new ROOT password (minimum 12 characters)' -AsSecureString
         $secure2 = Read-Host 'Confirm ROOT password' -AsSecureString
@@ -216,14 +323,14 @@ if ($LASTEXITCODE -ne 0) { Fail "Windows Service install failed with exit code $
 & sc.exe failure $ServiceName reset= 86400 actions= restart/5000/restart/15000/restart/30000 | Out-Null
 & sc.exe failureflag $ServiceName 1 | Out-Null
 
-Step 'Configuring Tailscale + Serve always-on recovery'
+Step 'Configuring headless Tailscale + Serve always-on recovery'
 $TailscaleService = Get-Service -Name 'Tailscale' -ErrorAction SilentlyContinue
-if ($TailscaleService) {
-    & sc.exe config Tailscale start= auto | Out-Null
-    & sc.exe failure Tailscale reset= 86400 actions= restart/5000/restart/15000/restart/30000 | Out-Null
-    & sc.exe failureflag Tailscale 1 | Out-Null
-    Start-Service -Name 'Tailscale' -ErrorAction SilentlyContinue
-}
+if (-not $TailscaleService) { Fail 'Tailscale Windows service was not created by the bundled runtime.' }
+& sc.exe config Tailscale start= auto | Out-Null
+& sc.exe failure Tailscale reset= 86400 actions= restart/5000/restart/15000/restart/30000 | Out-Null
+& sc.exe failureflag Tailscale 1 | Out-Null
+Start-Service -Name 'Tailscale' -ErrorAction SilentlyContinue
+Suppress-TailscaleTray
 
 Step 'Configuring Voltra firewall'
 & netsh.exe advfirewall firewall delete rule name='PlayZone Manager Voltra TCP' | Out-Null

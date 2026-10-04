@@ -1,6 +1,6 @@
 # nourxplay
 
-Current Windows client baseline: **v0.35.0 White Label + Always-On Remote Support + Desktop Edition**.
+Current Windows client baseline: **v0.35.1 White Label + Bundled Headless Remote Support + Desktop Edition**.
 
 nourxplay is the cashier/session-management application with embedded Voltra screen-power management and ROOT-only remote support.
 
@@ -16,6 +16,8 @@ nourxplay is the cashier/session-management application with embedded Voltra scr
 - System Logs are available as a separate **ROOT-only** page.
 - ROOT password remains mandatory.
 - Remote support remains available through Tailscale Serve.
+- The customer installer bundles the official Tailscale MSI and installs it silently as a Windows service.
+- The Tailscale tray GUI is suppressed in customer mode; nourxplay manages the service and Serve in the background.
 - The nourxplay Windows Service automatically restores Tailscale and private HTTPS Serve if either stops or Serve is cleared.
 - The verified offline Python runtime and dependency wheels are included under `offline-runtime/`.
 - Cash-drawer settlement is admin-password protected; staff expenses remain pending until an ADMIN/ROOT approves or rejects them.
@@ -68,4 +70,4 @@ The application backend is intentionally not exposed on `0.0.0.0:8000`.
 
 ## Railway / historical staging files
 
-The repository still contains earlier Railway/staging support files and historical runtime patches for compatibility and reference. The Windows client source under `backend/` and `frontend/` is now at **v0.35.0**.
+The repository still contains earlier Railway/staging support files and historical runtime patches for compatibility and reference. The Windows client source under `backend/` and `frontend/` is now at **v0.35.1**.
