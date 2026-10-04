@@ -9,7 +9,7 @@ $ServiceName = 'PlayZoneManager'
 function Step([string]$Text) { Write-Host "`n==> $Text" -ForegroundColor Cyan }
 function Fail([string]$Text) { throw $Text }
 
-Write-Host 'PlayZone Manager v0.34.2 - Secure Cash Drawer Edition' -ForegroundColor Green
+Write-Host 'PlayZone Manager v0.34.3 - Secure Cash Drawer Edition' -ForegroundColor Green
 Write-Host 'Local backend + private Tailscale Serve support. Cloud Sync is disabled.'
 Write-Host 'Python is bundled offline. The installer downloads and verifies the official Electron/Chromium desktop runtime once if it is not bundled beside the installer.'
 
@@ -143,7 +143,7 @@ Step 'Securing ROOT account'
 & $Python -m app.root_setup status | Out-Host
 $rootStatus = $LASTEXITCODE
 if ($rootStatus -eq 3) {
-    Write-Host 'ROOT password setup is required for v0.34.2 Secure Cash Drawer Edition.' -ForegroundColor Yellow
+    Write-Host 'ROOT password setup is required for v0.34.3 Secure Cash Drawer Edition.' -ForegroundColor Yellow
     while ($true) {
         $secure1 = Read-Host 'Enter a new ROOT password (minimum 12 characters)' -AsSecureString
         $secure2 = Read-Host 'Confirm ROOT password' -AsSecureString
