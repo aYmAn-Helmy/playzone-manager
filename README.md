@@ -4,9 +4,9 @@ Current Windows client baseline: **v0.35.0 White Label + Always-On Remote Suppor
 
 nourxplay is the cashier/session-management application with embedded Voltra screen-power management and ROOT-only remote support.
 
-## v0.34 highlights
+## v0.35 white-label highlights
 
-- Keeps the original **nourxplay** product name and branding.
+- Presents the customer-facing product under the **nourxplay** brand.
 - Adds a self-contained Electron/Chromium desktop client instead of depending on Microsoft Edge or Chrome.
 - The local nourxplay backend remains bound to `127.0.0.1:8000`.
 - Adds a responsive UI for desktop, tablet, and mobile screens.
@@ -41,11 +41,11 @@ Main Windows service/runtime files include:
 - `desktop-shell/`
 - `desktop-runtime/`
 - `offline-runtime/`
-- `Install-PlayZone-Service.bat`
+- `Install-nourxplay.bat`
 - `Install-PlayZone-Service.ps1`
-- `Uninstall-PlayZone-Service.ps1`
-- `Setup-Root-Password.bat`
-- `Setup-Tailscale-Support.bat`
+- `Uninstall-nourxplay.bat`
+- `Setup-nourxplay-Root-Password.bat`
+- `Setup-nourxplay-Remote-Support.bat`
 
 ## Desktop runtime
 
