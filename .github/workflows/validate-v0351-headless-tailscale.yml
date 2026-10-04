@@ -42,7 +42,8 @@ jobs:
 
           $installer = Get-Content Install-PlayZone-Service.ps1 -Raw
           foreach ($needle in @(
-            "tailscale-setup-1.102.4-amd64.msi",
+            "$TailscaleVersion = '1.102.4'",
+            'tailscale-setup-$TailscaleVersion-amd64.msi',
             "TS_NOLAUNCH=1",
             "TS_UNATTENDEDMODE=always",
             "Get-AuthenticodeSignature",
