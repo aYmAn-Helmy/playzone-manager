@@ -44,7 +44,7 @@ function healthCheck(timeoutMs = 1200) {
 function waitingHtml() {
   const html = `<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><title>nourxplay</title>
   <style>html,body{height:100%;margin:0;font-family:Segoe UI,Tahoma,Arial;background:#06101c;color:#eaf3ff}body{display:grid;place-items:center}.box{width:min(560px,90vw);background:#0d1d2e;border:1px solid #1d4268;border-radius:18px;padding:32px;text-align:center;box-shadow:0 25px 80px #0008}h1{margin:0 0 10px;color:#48a7ff}.spin{width:34px;height:34px;border:4px solid #163652;border-top-color:#4aa8ff;border-radius:50%;margin:24px auto;animation:s 1s linear infinite}@keyframes s{to{transform:rotate(360deg)}}p{color:#9db3ca;line-height:1.8}</style>
-  <body><div class="box"><h1>nourxplay</h1><div class="spin"></div><h2>جاري تشغيل النظام...</h2><p>التطبيق ينتظر خدمة nourxplay المحلية على هذا الجهاز.<br>لو استمر الانتظار راجع خدمة <b>PlayZoneManager</b>.</p></div></body></html>`;
+  <body><div class="box"><h1>nourxplay</h1><div class="spin"></div><h2>جاري تشغيل النظام...</h2><p>التطبيق ينتظر خدمة nourxplay المحلية على هذا الجهاز.<br>لو استمر الانتظار راجع خدمة النظام المحلية.</p></div></body></html>`;
   return 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
 }
 
