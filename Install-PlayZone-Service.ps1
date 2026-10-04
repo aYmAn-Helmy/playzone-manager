@@ -9,7 +9,7 @@ $ServiceName = 'PlayZoneManager'
 function Step([string]$Text) { Write-Host "`n==> $Text" -ForegroundColor Cyan }
 function Fail([string]$Text) { throw $Text }
 
-Write-Host 'PlayZone Manager v0.34.1 - Secure Cash Drawer Edition' -ForegroundColor Green
+Write-Host 'PlayZone Manager v0.34.2 - Secure Cash Drawer Edition' -ForegroundColor Green
 Write-Host 'Local backend + private Tailscale Serve support. Cloud Sync is disabled.'
 Write-Host 'Python is bundled offline. The installer downloads and verifies the official Electron/Chromium desktop runtime once if it is not bundled beside the installer.'
 
@@ -94,7 +94,7 @@ Copy-Item -LiteralPath (Join-Path $SourceRoot 'Bootstrap-Portable.ps1') -Destina
 Copy-Item -LiteralPath (Join-Path $SourceRoot 'Launch-PlayZone.ps1') -Destination $InstallRoot -Force
 Copy-Item -LiteralPath (Join-Path $SourceRoot 'VERSION.txt') -Destination $InstallRoot -Force
 Copy-Item -LiteralPath (Join-Path $SourceRoot 'PlayStation.ico') -Destination $InstallRoot -Force
-foreach ($optionalFile in @('Setup-Tailscale-Support.ps1','Setup-Tailscale-Support.bat','Setup-Root-Password.ps1','Setup-Root-Password.bat','REMOTE-SUPPORT-SETUP-AR.txt','TAILSCALE-GRANTS-EXAMPLE.json')) {
+foreach ($optionalFile in @('Uninstall-PlayZone-Service.ps1','Uninstall-PlayZone-Service.bat','Setup-Tailscale-Support.ps1','Setup-Tailscale-Support.bat','Setup-Root-Password.ps1','Setup-Root-Password.bat','REMOTE-SUPPORT-SETUP-AR.txt','TAILSCALE-GRANTS-EXAMPLE.json')) {
     $src = Join-Path $SourceRoot $optionalFile
     if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination $InstallRoot -Force }
 }
@@ -143,7 +143,7 @@ Step 'Securing ROOT account'
 & $Python -m app.root_setup status | Out-Host
 $rootStatus = $LASTEXITCODE
 if ($rootStatus -eq 3) {
-    Write-Host 'ROOT password setup is required for v0.34.1 Secure Cash Drawer Edition.' -ForegroundColor Yellow
+    Write-Host 'ROOT password setup is required for v0.34.2 Secure Cash Drawer Edition.' -ForegroundColor Yellow
     while ($true) {
         $secure1 = Read-Host 'Enter a new ROOT password (minimum 12 characters)' -AsSecureString
         $secure2 = Read-Host 'Confirm ROOT password' -AsSecureString
