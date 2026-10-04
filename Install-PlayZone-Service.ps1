@@ -167,7 +167,7 @@ if ($rootStatus -eq 3) {
     if ($NonInteractive) {
         Fail 'ROOT password setup is required before a non-interactive installation can continue.'
     }
-    Write-Host 'ROOT password setup is required for v0.34.7 Secure Cash Drawer Edition.' -ForegroundColor Yellow
+    Write-Host 'ROOT password setup is required for nourxplay v0.35.0 White Label Edition.' -ForegroundColor Yellow
     while ($true) {
         $secure1 = Read-Host 'Enter a new ROOT password (minimum 12 characters)' -AsSecureString
         $secure2 = Read-Host 'Confirm ROOT password' -AsSecureString
