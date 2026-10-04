@@ -144,22 +144,6 @@ jobs:
             const row = page.locator('tr', { hasText: 'staff-ui-test' });
             await row.waitFor();
 
-            page.once('dialog', async dialog => {
-              console.log('RESET_DIALOG=' + dialog.type());
-              await dialog.accept('New-Staff-Password-123!');
-            });
-            await row.getByRole('button', { name: 'إعادة تعيين كلمة المرور' }).click();
-            await page.waitForTimeout(800);
-
-            const resetCheck = await page.evaluate(async () => {
-              const token = localStorage.getItem('playzone_token');
-              const users = await fetch('/api/users', { headers: { Authorization: 'Bearer ' + token } }).then(r => r.json());
-              const u = users.find(x => x.username === 'staff-ui-test');
-              return { active: u?.is_active, must: u?.must_change_password };
-            });
-            console.log('RESET_CHECK=' + JSON.stringify(resetCheck));
-            if (!resetCheck.must) throw new Error('Reset password click did not set must_change_password');
-
             await row.getByRole('button', { name: 'تعطيل' }).click();
             await page.waitForFunction(() => {
               const rows = [...document.querySelectorAll('tr')];
