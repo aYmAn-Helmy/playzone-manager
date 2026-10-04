@@ -553,15 +553,20 @@ jobs:
             await page.getByRole('button', { name: 'إنهاء وإصدار الفاتورة' }).click();
             await page.waitForTimeout(700);
 
-            // Close the generated invoice modal before interacting with the page behind it.
-            const invoiceBackdrop = page.locator('.modal-backdrop').last();
-            if (await invoiceBackdrop.isVisible().catch(() => false)) {
-              const closeInvoice = invoiceBackdrop.getByRole('button', { name: 'إغلاق', exact: true });
-              if (await closeInvoice.isVisible().catch(() => false)) {
-                await closeInvoice.click();
+            // Close every visible modal before interacting with the page behind it.
+            for (let guard = 0; guard < 4 && await page.locator('.modal-backdrop').count(); guard++) {
+              const backdrop = page.locator('.modal-backdrop').last();
+              const closeButton = backdrop.getByRole('button', { name: 'إغلاق', exact: true });
+              if (await closeButton.count()) {
+                await closeButton.click({ force: true });
               } else {
-                await page.keyboard.press('Escape');
+                const xButton = backdrop.locator('.modal-close, .icon-button').first();
+                if (await xButton.count()) await xButton.click({ force: true });
               }
+              await page.waitForTimeout(150);
+            }
+            if (await page.locator('.modal-backdrop').count()) {
+              throw new Error('A modal remained open before employee tests: ' + await page.locator('.modal-backdrop').last().innerText());
             }
 
             // Employee password reset + disable + enable from real internal modals.
