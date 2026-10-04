@@ -1,0 +1,162 @@
+name: Validate v0.34.6 Realtime UI
+
+on:
+  push:
+    branches:
+      - perf/v0346-realtime-ui
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  realtime-ui:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      VOLTRA_DEMO: "1"
+      VOLTRA_HTTP_PORT: "58086"
+      VOLTRA_TCP_PORT: "58087"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax and performance markers
+        shell: pwsh
+        run: |
+          node --check frontend/dist/assets/index-v031.js
+          node --check frontend/dist/playzone-responsive.js
+          $js = Get-Content frontend/dist/assets/index-v031.js -Raw
+          $css = Get-Content frontend/dist/assets/index-v031.css -Raw
+          if (-not $js.Contains('PzLive=')) { throw 'Realtime session calculator missing.' }
+          if (-not $js.Contains('PzPatchSession')) { throw 'Immediate session patch helper missing.' }
+          if (-not $js.Contains('Promise.allSettled([Pe(!1),PzMeta(),Ie(o)]')) { throw 'Parallel post-action refresh missing.' }
+          if (-not $js.Contains('value:Qe(live.elapsed)')) { throw 'Live elapsed rendering missing.' }
+          if (-not $js.Contains('value:Qe(live.billable)')) { throw 'Live billable rendering missing.' }
+          if (-not $css.Contains('.button:active:not(:disabled){transform:scale(.985)}')) { throw 'Fast button feedback missing.' }
+
+      - name: Install backend and Electron test dependencies
+        shell: pwsh
+        run: |
+          python -m pip install -r backend/requirements.txt
+          npm install --no-save electron@44.4.5 playwright-core@1.55.0
+
+      - name: Seed test database
+        shell: pwsh
+        run: |
+          $env:PLAYZONE_DB_PATH = Join-Path $env:RUNNER_TEMP 'realtime-ui.db'
+          "PLAYZONE_DB_PATH=$env:PLAYZONE_DB_PATH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          @'
+          from sqlalchemy import select
+          from app.main import seed_data
+          from app.db import SessionLocal
+          from app.models import User
+          from app.activation import ACTIVATION_HASH_KEY, machine_hash, set_setting
+          from app.security import hash_password
+
+          seed_data()
+          with SessionLocal() as db:
+              set_setting(db, ACTIVATION_HASH_KEY, machine_hash())
+              admin = db.scalar(select(User).where(User.username == "admin"))
+              admin.password_hash = hash_password("Realtime-Admin-123!")
+              admin.must_change_password = False
+              admin.is_active = True
+              db.commit()
+          print("REALTIME_SEED_OK")
+          '@ | Set-Content backend\seed_realtime.py -Encoding UTF8
+          Push-Location backend
+          python seed_realtime.py
+          Pop-Location
+
+      - name: Start backend
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath python -ArgumentList '-m','uvicorn','app.main:app','--host','127.0.0.1','--port','8000' -WorkingDirectory backend -PassThru
+          $p.Id | Set-Content backend.pid
+          $ok=$false
+          for($i=0;$i -lt 60;$i++){
+            try {
+              $h=Invoke-RestMethod http://127.0.0.1:8000/api/health -TimeoutSec 2
+              if($h.ok){$ok=$true;break}
+            } catch {}
+            Start-Sleep -Milliseconds 500
+          }
+          if(-not $ok){throw 'Backend failed to start.'}
+
+      - name: Electron realtime timer and action latency test
+        shell: pwsh
+        run: |
+          @'
+          const { _electron: electron } = require('playwright-core');
+          const electronPath = require('electron');
+
+          function sec(text) {
+            const [h,m,s] = text.trim().split(':').map(Number);
+            return h*3600 + m*60 + s;
+          }
+
+          (async()=>{
+            const app = await electron.launch({
+              executablePath: electronPath,
+              args: ['desktop-shell/main.js'],
+              env: { ...process.env }
+            });
+            const page = await app.firstWindow();
+
+            await page.getByLabel('اسم المستخدم').fill('admin');
+            await page.getByLabel('كلمة المرور').fill('Realtime-Admin-123!');
+            await page.getByRole('button',{name:'دخول'}).click();
+            await page.getByText('PlayZone',{exact:true}).waitFor({timeout:15000});
+
+            await page.getByRole('button',{name:'فتح وردية',exact:true}).click();
+            await page.getByRole('heading',{name:'فتح وردية'}).waitFor();
+            await page.getByRole('button',{name:'فتح الوردية'}).click();
+            await page.getByText('وردية مفتوحة',{exact:true}).waitFor({timeout:10000});
+
+            await page.getByRole('button',{name:'بدء جلسة'}).first().click();
+            await page.getByRole('button',{name:'تأكيد البدء'}).click();
+            const card = page.locator('.station-card',{has:page.getByRole('button',{name:'إنهاء الجلسة'})}).first();
+            await card.waitFor({timeout:10000});
+
+            const durationValue = card.locator('.modal-line').filter({hasText:'مدة الجلسة'}).locator('strong');
+            const samples=[];
+            for(let i=0;i<4;i++){
+              samples.push(sec(await durationValue.innerText()));
+              await page.waitForTimeout(1050);
+            }
+            console.log('REALTIME_SAMPLES='+JSON.stringify(samples));
+            for(let i=1;i<samples.length;i++){
+              const delta=samples[i]-samples[i-1];
+              if(delta < 1 || delta > 2) throw new Error('Timer is not advancing every second: '+JSON.stringify(samples));
+            }
+
+            const pauseStart=Date.now();
+            await card.getByRole('button',{name:/إيقاف مؤقت/}).click();
+            await card.getByText('موقوف مؤقتاً',{exact:true}).waitFor({timeout:1500});
+            const pauseMs=Date.now()-pauseStart;
+            console.log('PAUSE_UI_MS='+pauseMs);
+            if(pauseMs>1500) throw new Error('Pause UI response too slow: '+pauseMs);
+
+            const pausedBillable = sec(await card.locator('.modal-line').filter({hasText:'الوقت المحسوب'}).locator('strong').innerText());
+            await page.waitForTimeout(1200);
+            const pausedBillable2 = sec(await card.locator('.modal-line').filter({hasText:'الوقت المحسوب'}).locator('strong').innerText());
+            if(pausedBillable2 !== pausedBillable) throw new Error('Billable timer advanced while paused.');
+
+            const resumeStart=Date.now();
+            await card.getByRole('button',{name:/استئناف/}).click();
+            await card.getByText('شغال',{exact:true}).waitFor({timeout:1500});
+            const resumeMs=Date.now()-resumeStart;
+            console.log('RESUME_UI_MS='+resumeMs);
+            if(resumeMs>1500) throw new Error('Resume UI response too slow: '+resumeMs);
+
+            console.log('REALTIME_UI_OK');
+            await app.close();
+          })().catch(err=>{console.error(err);process.exit(1)});
+          '@ | Set-Content realtime-ui-test.cjs -Encoding UTF8
+          node realtime-ui-test.cjs
+
+      - name: Stop backend
+        if: always()
+        shell: pwsh
+        run: |
+          if(Test-Path backend.pid){Stop-Process -Id (Get-Content backend.pid) -Force -ErrorAction SilentlyContinue}
