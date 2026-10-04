@@ -1,0 +1,183 @@
+name: Diagnose Session and User Actions
+
+on:
+  push:
+    branches:
+      - fix/v0343-session-user-actions
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      PLAYZONE_DB_PATH: ${{ runner.temp }}\ui-actions.db
+      VOLTRA_DEMO: "1"
+      VOLTRA_HTTP_PORT: "48086"
+      VOLTRA_TCP_PORT: "48087"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install backend dependencies
+        shell: pwsh
+        run: python -m pip install -r backend/requirements.txt
+
+      - name: Seed activated admin and staff
+        shell: pwsh
+        run: |
+          @'
+          from sqlalchemy import select
+          from app.main import seed_data
+          from app.db import SessionLocal
+          from app.models import User
+          from app.activation import ACTIVATION_HASH_KEY, machine_hash, set_setting
+          from app.security import hash_password
+
+          seed_data()
+          with SessionLocal() as db:
+              set_setting(db, ACTIVATION_HASH_KEY, machine_hash())
+              admin = db.scalar(select(User).where(User.username == "admin"))
+              admin.password_hash = hash_password("Admin-UI-123456!")
+              admin.must_change_password = False
+              admin.is_active = True
+
+              staff = db.scalar(select(User).where(User.username == "staff-ui-test"))
+              if staff is None:
+                  staff = User(
+                      username="staff-ui-test",
+                      display_name="Staff UI Test",
+                      password_hash=hash_password("Staff-UI-123456!"),
+                      role="STAFF",
+                      must_change_password=False,
+                      is_active=True,
+                  )
+                  db.add(staff)
+              else:
+                  staff.password_hash = hash_password("Staff-UI-123456!")
+                  staff.must_change_password = False
+                  staff.is_active = True
+              db.commit()
+          print("SEEDED")
+          '@ | Set-Content backend\seed_ui_actions.py -Encoding UTF8
+          Push-Location backend
+          python seed_ui_actions.py
+          Pop-Location
+
+      - name: Start backend
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath python -ArgumentList '-m','uvicorn','app.main:app','--host','127.0.0.1','--port','8000' -WorkingDirectory backend -PassThru
+          $p.Id | Set-Content backend.pid
+          $ok = $false
+          for ($i=0; $i -lt 60; $i++) {
+            try {
+              $r = Invoke-RestMethod -Uri http://127.0.0.1:8000/api/health -TimeoutSec 2
+              if ($r.ok) { $ok = $true; break }
+            } catch {}
+            Start-Sleep -Milliseconds 500
+          }
+          if (-not $ok) { throw 'Backend did not start.' }
+
+      - name: Install Electron Playwright
+        shell: pwsh
+        run: npm install --no-save electron@44.4.5 playwright-core@1.55.0
+
+      - name: Reproduce and verify UI actions
+        shell: pwsh
+        run: |
+          @'
+          const { _electron: electron } = require('playwright-core');
+          const electronPath = require('electron');
+
+          (async () => {
+            const app = await electron.launch({
+              executablePath: electronPath,
+              args: ['desktop-shell/main.js'],
+              env: { ...process.env }
+            });
+            const page = await app.firstWindow();
+
+            await page.getByLabel('اسم المستخدم').fill('admin');
+            await page.getByLabel('كلمة المرور').fill('Admin-UI-123456!');
+            await page.getByRole('button', { name: 'دخول' }).click();
+            await page.getByText('PlayZone', { exact: true }).waitFor({ timeout: 15000 });
+
+            // Reproduce start without an open cashier shift.
+            await page.getByRole('button', { name: 'بدء جلسة' }).first().click();
+            await page.getByRole('heading', { name: /بدء جلسة/ }).waitFor();
+            await page.getByRole('button', { name: 'تأكيد البدء' }).click();
+            await page.waitForTimeout(800);
+
+            const errorText = await page.locator('.error-banner, .top-error, .error, [role="alert"]').allTextContents().catch(() => []);
+            const body = await page.locator('body').innerText();
+            console.log('START_WITHOUT_SHIFT_BODY_HAS_ERROR=' + body.includes('يجب فتح وردية كاشير أولاً'));
+
+            // Open the admin shift directly, then retry the exact modal action.
+            await page.evaluate(async () => {
+              const token = localStorage.getItem('playzone_token');
+              const r = await fetch('/api/shifts/open', {
+                method: 'POST',
+                headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ opening_cash_piasters: 0 }),
+              });
+              if (!r.ok) throw new Error(await r.text());
+            });
+
+            // close stale modal and reopen
+            const cancel = page.getByRole('button', { name: 'إلغاء' });
+            if (await cancel.isVisible().catch(() => false)) await cancel.click();
+            await page.getByRole('button', { name: 'بدء جلسة' }).first().click();
+            await page.getByRole('button', { name: 'تأكيد البدء' }).click();
+            await page.waitForFunction(() => document.body.innerText.includes('إنهاء الجلسة'), null, { timeout: 15000 });
+            console.log('START_WITH_SHIFT_OK');
+
+            // Users page.
+            await page.getByRole('button', { name: 'الموظفين', exact: true }).click();
+            await page.getByRole('heading', { name: 'حسابات الموظفين' }).waitFor();
+            const row = page.locator('tr', { hasText: 'staff-ui-test' });
+            await row.waitFor();
+
+            page.once('dialog', async dialog => {
+              console.log('RESET_DIALOG=' + dialog.type());
+              await dialog.accept('New-Staff-Password-123!');
+            });
+            await row.getByRole('button', { name: 'إعادة تعيين كلمة المرور' }).click();
+            await page.waitForTimeout(800);
+
+            const resetCheck = await page.evaluate(async () => {
+              const token = localStorage.getItem('playzone_token');
+              const users = await fetch('/api/users', { headers: { Authorization: 'Bearer ' + token } }).then(r => r.json());
+              const u = users.find(x => x.username === 'staff-ui-test');
+              return { active: u?.is_active, must: u?.must_change_password };
+            });
+            console.log('RESET_CHECK=' + JSON.stringify(resetCheck));
+            if (!resetCheck.must) throw new Error('Reset password click did not set must_change_password');
+
+            await row.getByRole('button', { name: 'تعطيل' }).click();
+            await page.waitForFunction(() => {
+              const rows = [...document.querySelectorAll('tr')];
+              const row = rows.find(r => r.innerText.includes('staff-ui-test'));
+              return row && row.innerText.includes('معطل');
+            }, null, { timeout: 15000 });
+            console.log('DISABLE_OK');
+
+            await app.close();
+          })().catch(err => {
+            console.error(err);
+            process.exit(1);
+          });
+          '@ | Set-Content diagnose-ui-actions.cjs -Encoding UTF8
+          node diagnose-ui-actions.cjs
+
+      - name: Stop backend
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path backend.pid) {
+            Stop-Process -Id (Get-Content backend.pid) -Force -ErrorAction SilentlyContinue
+          }
