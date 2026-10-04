@@ -1,0 +1,202 @@
+name: Build nourxplay v0.35.1 Full Client
+
+on:
+  push:
+    branches:
+      - release/nourxplay-v0351-client-build
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate source
+        shell: pwsh
+        run: |
+          if ((Get-Content VERSION.txt -Raw).Trim() -ne '0.35.1') { throw 'VERSION mismatch.' }
+          python -m py_compile backend/app/main.py backend/app/services.py backend/app/windows_service.py backend/app/tailscale_support.py backend/app/root_setup.py
+          node --check frontend/dist/assets/index-v031.js
+          node --check frontend/dist/playzone-responsive.js
+          node --check desktop-shell/main.js
+
+          $installer = Get-Content Install-PlayZone-Service.ps1 -Raw
+          foreach ($needle in @(
+            "TS_NOLAUNCH=1",
+            "TS_UNATTENDEDMODE=always",
+            "Suppress-TailscaleTray",
+            "tailscale-ipn",
+            "nourxplay v0.35.1"
+          )) {
+            if (-not $installer.Contains($needle)) { throw "Missing v0.35.1 feature: $needle" }
+          }
+
+      - name: Prepare customer package
+        shell: pwsh
+        run: |
+          $pkg = Join-Path $PWD 'package'
+          New-Item -ItemType Directory -Force -Path $pkg | Out-Null
+
+          foreach ($dir in @('backend','frontend','offline-runtime','desktop-shell')) {
+            Copy-Item -LiteralPath $dir -Destination (Join-Path $pkg $dir) -Recurse -Force
+          }
+
+          New-Item -ItemType Directory -Force -Path (Join-Path $pkg 'desktop-runtime') | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $pkg 'tailscale-runtime') | Out-Null
+
+          foreach ($file in @(
+            'Bootstrap-Portable.ps1',
+            'Install-PlayZone-Service.bat',
+            'Install-PlayZone-Service.ps1',
+            'Install-nourxplay.bat',
+            'Launch-PlayZone.ps1',
+            'Uninstall-PlayZone-Service.bat',
+            'Uninstall-PlayZone-Service.ps1',
+            'Uninstall-nourxplay.bat',
+            'Setup-Root-Password.bat',
+            'Setup-Root-Password.ps1',
+            'Setup-nourxplay-Root-Password.bat',
+            'Setup-Tailscale-Support.bat',
+            'Setup-Tailscale-Support.ps1',
+            'Setup-nourxplay-Remote-Support.bat',
+            'REMOTE-SUPPORT-SETUP-AR.txt',
+            'TAILSCALE-GRANTS-EXAMPLE.json',
+            'README-NOURXPLAY-AR.txt',
+            'README-SERVICE-AR.txt',
+            'CHANGES-v0.34-AR.txt',
+            'DESKTOP-RUNTIME-AR.txt',
+            'PlayStation.ico',
+            'VERSION.txt'
+          )) {
+            if (Test-Path -LiteralPath $file) {
+              Copy-Item -LiteralPath $file -Destination $pkg -Force
+            }
+          }
+
+          Get-ChildItem -LiteralPath $pkg -Recurse -Directory -Force |
+            Where-Object { $_.Name -in @('__pycache__','.pytest_cache','.git','.github','node_modules') } |
+            Sort-Object FullName -Descending |
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+          Get-ChildItem -LiteralPath $pkg -Recurse -File -Force |
+            Where-Object { $_.Extension -in @('.pyc','.pyo','.log','.db','.sqlite','.sqlite3') } |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+
+          @'
+          nourxplay v0.35.1
+          =================
+
+          Full Client — Headless Remote Support
+
+          التثبيت:
+          1) فك الضغط بالكامل.
+          2) شغّل Install-nourxplay.bat باستخدام Run as administrator.
+          3) Tailscale يتم تثبيته تلقائياً كخدمة Windows بدون Tray GUI.
+          4) أول مرة قم بتعيين ROOT Password.
+          5) لربط Remote Support بالـTailnet استخدم Auth Key مرة واحدة من صفحة ROOT.
+          6) بعد الربط، nourxplay يحافظ على Tailscale + Serve شغالين تلقائياً بعد Restart أو انقطاع الشبكة.
+
+          لا تحتاج لتثبيت برنامج Tailscale يدوياً، ولا يحتاج العميل لفتح Tailscale من جانب الساعة.
+
+          الإزالة:
+          - Uninstall-nourxplay.bat
+          - للحذف الكامل لبيانات جهاز الاختبار:
+            Uninstall-nourxplay.bat /RemoveData
+          '@ | Set-Content -LiteralPath (Join-Path $pkg 'START-HERE-NOURXPLAY-AR.txt') -Encoding UTF8
+
+          @"
+          Brand: nourxplay
+          Version: 0.35.1
+          Source commit: $env:GITHUB_SHA
+          Remote runtime: Tailscale 1.102.4 amd64, headless Windows Service
+          "@ | Set-Content -LiteralPath (Join-Path $pkg 'BUILD-INFO.txt') -Encoding UTF8
+
+      - name: Bundle verified Electron runtime
+        shell: pwsh
+        run: |
+          $version = '44.4.5'
+          $name = "electron-v$version-win32-x64.zip"
+          $url = "https://github.com/electron/electron/releases/download/v$version/$name"
+          $expected = '11c395820a5aaa8ebcc0686b476d0ac98a730274ebfbdc8cf5538a7c2815cb5d'
+          $dest = Join-Path $PWD "package\desktop-runtime\$name"
+          Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $dest
+          $actual = (Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Electron SHA256 mismatch: $actual" }
+
+      - name: Bundle verified Tailscale runtime
+        shell: pwsh
+        run: |
+          $version = '1.102.4'
+          $name = "tailscale-setup-$version-amd64.msi"
+          $url = "https://dl.tailscale.com/stable/$name"
+          $dest = Join-Path $PWD "package\tailscale-runtime\$name"
+          $shaDest = "$dest.sha256"
+
+          Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $dest
+          Invoke-WebRequest -UseBasicParsing -Uri "$url.sha256" -OutFile $shaDest
+
+          $checksumText = (Get-Content -LiteralPath $shaDest -Raw).Trim()
+          $match = [regex]::Match($checksumText, '(?i)\b[0-9a-f]{64}\b')
+          if (-not $match.Success) { throw 'Tailscale checksum file invalid.' }
+          $actual = (Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $match.Value.ToLowerInvariant()) { throw "Tailscale SHA256 mismatch: $actual" }
+
+          $signature = Get-AuthenticodeSignature -FilePath $dest
+          if ($signature.Status -ne 'Valid') { throw "Tailscale signature status: $($signature.Status)" }
+          if (-not ($signature.SignerCertificate.Subject -match 'Tailscale')) { throw "Unexpected Tailscale signer: $($signature.SignerCertificate.Subject)" }
+
+          Write-Host "TAILSCALE_SHA256=$actual"
+
+      - name: Final package audit
+        shell: pwsh
+        run: |
+          $required = @(
+            'package\Install-nourxplay.bat',
+            'package\Install-PlayZone-Service.ps1',
+            'package\Uninstall-nourxplay.bat',
+            'package\offline-runtime\python-3.12.6-embed-amd64.zip',
+            'package\desktop-runtime\electron-v44.4.5-win32-x64.zip',
+            'package\tailscale-runtime\tailscale-setup-1.102.4-amd64.msi',
+            'package\tailscale-runtime\tailscale-setup-1.102.4-amd64.msi.sha256',
+            'package\README-NOURXPLAY-AR.txt',
+            'package\START-HERE-NOURXPLAY-AR.txt',
+            'package\VERSION.txt'
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path -LiteralPath $path)) { throw "Missing package file: $path" }
+          }
+
+          if ((Get-Content package\VERSION.txt -Raw).Trim() -ne '0.35.1') { throw 'Package version mismatch.' }
+
+          $bad = Get-ChildItem -LiteralPath package -Recurse -Force | Where-Object {
+            $_.Name -in @('__pycache__','.pytest_cache','.git','.github','node_modules') -or
+            $_.Extension -in @('.db','.sqlite','.sqlite3','.log','.pyc','.pyo')
+          }
+          if ($bad) { throw "Unexpected package content: $($bad.FullName -join ', ')" }
+
+          Write-Host 'NOURXPLAY_V0351_FULL_PACKAGE_OK'
+
+      - name: Create ZIP
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          $zip = 'out\nourxplay-v0.35.1-Client-Full-Headless-Remote.zip'
+          Compress-Archive -Path package\* -DestinationPath $zip -CompressionLevel Optimal -Force
+          $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $hash | Set-Content "$zip.sha256" -Encoding ASCII
+          Write-Host "NOURXPLAY_CLIENT_SHA256=$hash"
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: nourxplay-v0.35.1-Client-Full-Headless-Remote
+          path: out/*
+          if-no-files-found: error
+          retention-days: 14
