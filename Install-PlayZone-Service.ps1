@@ -109,7 +109,7 @@ function Ensure-BundledTailscale {
     }
 
     $arguments = @(
-        '/i', $msiPath,
+        '/i', ('"' + $msiPath + '"'),
         '/qn', '/norestart',
         'TS_NOLAUNCH=1',
         'TS_UNATTENDEDMODE=always',
