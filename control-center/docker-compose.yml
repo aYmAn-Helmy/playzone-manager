@@ -1,0 +1,43 @@
+name: nourxplay-control-center
+
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: nourxplay-control-center-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-nourxplay_control}
+      POSTGRES_USER: ${POSTGRES_USER:-nourxplay}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - ${CONTROL_CENTER_DATA_DIR:-/DATA/AppData/nourxplay-control-center}/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nourxplay} -d ${POSTGRES_DB:-nourxplay_control}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - control
+
+  api:
+    build:
+      context: ./api
+    container_name: nourxplay-control-center
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-nourxplay}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-nourxplay_control}
+      CONTROL_CENTER_ADMIN_TOKEN: ${CONTROL_CENTER_ADMIN_TOKEN:?Set CONTROL_CENTER_ADMIN_TOKEN in .env}
+      CONTROL_CENTER_PUBLIC_BASE_URL: ${CONTROL_CENTER_PUBLIC_BASE_URL:-}
+      DEVICE_OFFLINE_SECONDS: ${DEVICE_OFFLINE_SECONDS:-180}
+      HEARTBEAT_INTERVAL_SECONDS: ${HEARTBEAT_INTERVAL_SECONDS:-60}
+    ports:
+      - "${CONTROL_CENTER_PORT:-18080}:8080"
+    networks:
+      - control
+
+networks:
+  control:
+    name: nourxplay-control-center
