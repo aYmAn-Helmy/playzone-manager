@@ -1,0 +1,133 @@
+name: Validate v0.36.0 Control Center
+
+on:
+  push:
+    branches:
+      - feature/v0360-control-center
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python syntax
+        run: |
+          python -m py_compile             control-center/api/app/db.py             control-center/api/app/models.py             control-center/api/app/security.py             control-center/api/app/main.py
+
+      - name: Prepare test environment
+        working-directory: control-center
+        run: |
+          cp .env.example .env
+          sed -i 's/CHANGE_THIS_TO_A_LONG_RANDOM_PASSWORD/test-postgres-password-0123456789/' .env
+          sed -i 's/CHANGE_THIS_TO_A_DIFFERENT_LONG_RANDOM_TOKEN/test-admin-token-abcdefghijklmnopqrstuvwxyz/' .env
+          sed -i 's|/DATA/AppData/nourxplay-control-center|./test-data|' .env
+          docker compose config -q
+
+      - name: Build and start stack
+        working-directory: control-center
+        run: |
+          docker compose up -d --build
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:18080/api/health >/tmp/health.json; then
+              cat /tmp/health.json
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs
+          exit 1
+
+      - name: Enrollment and heartbeat integration test
+        run: |
+          python - <<'PY'
+          import json, urllib.request
+
+          base = "http://127.0.0.1:18080"
+          admin = "test-admin-token-abcdefghijklmnopqrstuvwxyz"
+
+          def request(path, *, method="GET", body=None, headers=None):
+              data = None if body is None else json.dumps(body).encode()
+              h = {"Content-Type": "application/json"}
+              h.update(headers or {})
+              req = urllib.request.Request(base + path, data=data, headers=h, method=method)
+              with urllib.request.urlopen(req, timeout=10) as r:
+                  return json.loads(r.read().decode())
+
+          enrollment = request(
+              "/api/admin/enrollment-codes",
+              method="POST",
+              headers={"X-Admin-Token": admin},
+              body={"customer_name": "Test Customer", "site_name": "Giza Branch", "ttl_minutes": 60},
+          )
+          assert enrollment["enrollment_code"].startswith("nxc_"), enrollment
+
+          enrolled = request(
+              "/api/device/enroll",
+              method="POST",
+              body={
+                  "enrollment_code": enrollment["enrollment_code"],
+                  "installation_id": "integration-device-0001",
+                  "hostname": "NOURXPLAY-TEST",
+                  "app_version": "0.35.1",
+                  "os_version": "Windows Test",
+              },
+          )
+          token = enrolled["device_token"]
+          assert token.startswith("nxd_"), enrolled
+
+          heartbeat = request(
+              "/api/device/heartbeat",
+              method="POST",
+              headers={"Authorization": "Bearer " + token},
+              body={
+                  "installation_id": "integration-device-0001",
+                  "hostname": "NOURXPLAY-TEST",
+                  "app_version": "0.35.1",
+                  "os_version": "Windows Test",
+                  "tailscale_ipv4": "100.64.10.20",
+                  "tailscale_dns_name": "nourxplay-test.example.ts.net",
+                  "remote_url": "https://nourxplay-test.example.ts.net",
+                  "tailscale_connected": True,
+                  "serve_active": True,
+              },
+          )
+          assert heartbeat["ok"] is True, heartbeat
+
+          devices = request(
+              "/api/admin/devices",
+              headers={"X-Admin-Token": admin},
+          )
+          assert len(devices) == 1, devices
+          d = devices[0]
+          assert d["customer_name"] == "Test Customer", d
+          assert d["site_name"] == "Giza Branch", d
+          assert d["online"] is True, d
+          assert d["tailscale_connected"] is True, d
+          assert d["serve_active"] is True, d
+          assert d["remote_url"].startswith("https://"), d
+          print("CONTROL_CENTER_INTEGRATION_OK")
+          PY
+
+      - name: Dashboard smoke test
+        run: |
+          curl -fsS http://127.0.0.1:18080/ | grep -q "nourxplay Control Center"
+
+      - name: Logs on failure
+        if: failure()
+        working-directory: control-center
+        run: docker compose logs
+
+      - name: Stop stack
+        if: always()
+        working-directory: control-center
+        run: docker compose down -v
