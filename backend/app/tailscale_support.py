@@ -24,11 +24,6 @@ def _remote_support_always_on() -> bool:
     return value not in {"", "0", "false", "no", "off"}
 
 
-def _headless_enabled() -> bool:
-    value = os.getenv("PLAYZONE_TAILSCALE_HEADLESS", "0").strip().lower()
-    return value not in {"", "0", "false", "no", "off"}
-
-
 def _creation_flags() -> int:
     return int(getattr(subprocess, "CREATE_NO_WINDOW", 0)) if os.name == "nt" else 0
 
@@ -76,28 +71,7 @@ def _clean_message(proc: subprocess.CompletedProcess[str]) -> str:
 def _support_hostname() -> str:
     raw = socket.gethostname().lower()
     safe = re.sub(r"[^a-z0-9-]+", "-", raw).strip("-") or "windows"
-    return f"nourxplay-{safe}"[:63]
-
-
-def _suppress_tray_gui() -> None:
-    if os.name != "nt" or not _headless_enabled():
-        return
-    try:
-        subprocess.run(
-            ["taskkill.exe", "/F", "/IM", "tailscale-ipn.exe"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-            creationflags=_creation_flags(),
-        )
-    except Exception:
-        pass
-    common_startup = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / "Tailscale.lnk"
-    try:
-        common_startup.unlink(missing_ok=True)
-    except OSError:
-        pass
+    return f"zonexplay-{safe}"[:63]
 
 
 def _service_state() -> str | None:
@@ -205,7 +179,6 @@ def get_status() -> dict:
         "version": None,
         "always_on": False,
         "remote_access_always_on": _remote_support_always_on(),
-        "headless": _headless_enabled(),
         "message": None,
         "serve_active": False,
         "serve_target": SERVE_TARGET,
@@ -215,7 +188,7 @@ def get_status() -> dict:
         "serve_message": None,
     }
     if not supported:
-        base["message"] = "دعم Tailscale متاح في نسخة nourxplay المحلية على Windows فقط."
+        base["message"] = "دعم Tailscale متاح في نسخة ZoneXplay المحلية على Windows فقط."
         return base
 
     exe = _find_tailscale()
@@ -340,7 +313,7 @@ def reconnect() -> dict:
     if not status["supported"]:
         raise TailscaleSupportError("دعم Tailscale متاح في نسخة Windows المحلية فقط.")
     if not status["installed"]:
-        raise TailscaleSupportError("مكوّن Remote Support غير مثبت. أعد تشغيل Install-nourxplay.bat كمسؤول.")
+        raise TailscaleSupportError("مكوّن Remote Support غير مثبت. أعد تشغيل Install-ZoneXplay.bat كمسؤول.")
     if status["needs_login"]:
         raise TailscaleSupportError("الجهاز غير مربوط بالـTailnet. استخدم Auth Key من صفحة ROOT مرة واحدة.")
 
@@ -385,7 +358,7 @@ def enable_remote_access() -> dict:
 def disable_remote_access() -> dict:
     if _remote_support_always_on():
         raise TailscaleSupportError(
-            "Remote Support مضبوط على Always-On بواسطة nourxplay وسيتم تشغيل Tailscale Serve تلقائياً."
+            "Remote Support مضبوط على Always-On بواسطة ZoneXplay وسيتم تشغيل Tailscale Serve تلقائياً."
         )
     status = get_status()
     if not status.get("supported"):
@@ -398,7 +371,7 @@ def disable_remote_access() -> dict:
     exe = _find_tailscale()
     if not exe:
         raise TailscaleSupportError("لم يتم العثور على tailscale.exe.")
-    # Remove only the default HTTPS endpoint used by nourxplay. Do not reset any
+    # Remove only the default HTTPS endpoint used by ZoneXplay. Do not reset any
     # unrelated Serve configuration that an administrator may have on the node.
     proc = _run(exe, ["serve", f"--https={SERVE_HTTPS_PORT}", "off"], timeout=20)
     if proc.returncode != 0:
@@ -407,14 +380,13 @@ def disable_remote_access() -> dict:
 
 
 def ensure_always_on() -> dict:
-    """Recover the Tailscale daemon and, when policy is enabled, nourxplay Serve."""
+    """Recover the Tailscale daemon and, when policy is enabled, ZoneXplay Serve."""
     if os.name != "nt":
         return get_status()
     exe = _find_tailscale()
     if not exe:
         return get_status()
 
-    _suppress_tray_gui()
     subprocess.run(["sc.exe", "config", "Tailscale", "start=", "auto"], capture_output=True, creationflags=_creation_flags())
     subprocess.run(
         ["sc.exe", "failure", "Tailscale", "reset=", "86400", "actions=", "restart/5000/restart/15000/restart/30000"],
@@ -435,7 +407,7 @@ def ensure_always_on() -> dict:
         except TailscaleSupportError:
             status = get_status()
 
-    # nourxplay customer installs run with this policy enabled. If Serve is
+    # ZoneXplay customer installs run with this policy enabled. If Serve is
     # cleared, crashes, or is manually turned off, the service watchdog
     # restores private HTTPS access to the local backend automatically.
     if (
