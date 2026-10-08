@@ -1,10 +1,10 @@
-﻿nourxplay v0.35.0 - Secure Cash Drawer + Remote Support
+﻿ZoneXplay v0.35.2 - Secure Cash Drawer + Remote Support
 ===============================================
 
 التشغيل المحلي
 --------------
 Windows Boot -> PlayZoneManager Service -> Local Web http://127.0.0.1:8000
-واجهة المستخدم تفتح داخل nourxplay.exe بمتصفح Chromium مدمج (Electron)، بدون الاعتماد على Microsoft Edge.
+واجهة المستخدم تفتح داخل ZoneXplay.exe بمتصفح Chromium مدمج (Electron)، بدون الاعتماد على Microsoft Edge.
 
 المكونات
 --------
@@ -15,7 +15,7 @@ Windows Boot -> PlayZoneManager Service -> Local Web http://127.0.0.1:8000
 - Voltra TCP 10086 + Internal API 8086
 - Local Web 127.0.0.1:8000
 - Windows Service يبدأ تلقائياً مع Windows
-- Tailscale Remote Support مدمج في Installer ويعمل Headless عبر Private Serve مع Always-On Recovery
+- Tailscale Remote Support مدمج في Installer كنسخة Windows عادية مع Tray GUI وPrivate Serve
 - Cloud Sync: Disabled
 
 التثبيت
@@ -24,14 +24,14 @@ Windows Boot -> PlayZoneManager Service -> Local Web http://127.0.0.1:8000
 2) شغّل Install-PlayZone-Service.bat كـ Run as administrator.
 3) التثبيت نفسه Offline بالكامل؛ Python وكل المكتبات مضمنة.
 4) أول مرة سيطلب منك ROOT Password إذا لم يكن قد تم تأمين ROOT سابقاً.
-5) بعد نجاح التثبيت افتح nourxplay من Shortcut على Desktop.
+5) بعد نجاح التثبيت افتح ZoneXplay من Shortcut على Desktop.
 
 Remote Support
 --------------
-- لا يحتاج العميل لتثبيت أو تشغيل Tailscale يدوياً؛ nourxplay Full Installer يثبت خدمة Tailscale تلقائياً وبشكل Silent.
-- لا يتم تشغيل Tray GUI بجانب الساعة.
-- الربط بالـTailnet يتم مرة واحدة من صفحة ROOT باستخدام Auth Key آمن.
-- nourxplay يظل على 127.0.0.1:8000 ولا يتم فتح Port Forwarding.
+- لا يحتاج العميل لتثبيت أو تشغيل Tailscale يدوياً؛ ZoneXplay Full Installer يثبت خدمة Tailscale تلقائياً وبشكل Silent.
+- Tailscale يعمل بشكل طبيعي وتظل أيقونة الـTray والواجهة متاحة للمستخدم.
+- يمكن ربط الجهاز بالـTailnet بالطريقة العادية من Tailscale أو من إعداد Remote Support.
+- ZoneXplay يظل على 127.0.0.1:8000 ولا يتم فتح Port Forwarding.
 - Tailscale Serve يعرض الواجهة داخل الـTailnet فقط عبر HTTPS.
 - Windows Service يفحص Tailscale وServe تلقائياً ويعيد تشغيلهما إذا توقفا، بدون تدخل المستخدم.
 - بعد الربط الأول للجهاز بالـTailnet لا يحتاج العميل للضغط على Enable Remote Access مرة أخرى.
@@ -41,9 +41,9 @@ Remote Support
 البيانات
 --------
 C:\ProgramData\PlayZone Manager\secure-data\playzone.db
-C:\ProgramData\nourxplay\secure-data\voltra.json
-C:\ProgramData\nourxplay\secure-data\backups\
-C:\ProgramData\nourxplay\logs\service.log
+C:\ProgramData\ZoneXplay\secure-data\voltra.json
+C:\ProgramData\ZoneXplay\secure-data\backups\
+C:\ProgramData\ZoneXplay\logs\service.log
 
 مجلد secure-data محمي على Windows بحيث لا يستطيع Standard User قراءة أو تعديل
 قاعدة البيانات أو النسخ الاحتياطية مباشرة. الوصول متاح لـ LocalSystem وAdministrators فقط.
@@ -67,14 +67,14 @@ C:\ProgramData\nourxplay\logs\service.log
 Desktop Edition v0.32
 ---------------------
 - System Logs: ROOT only.
-- nourxplay.exe يستخدم Chromium مدمجاً عبر Electron 44.4.5.
+- ZoneXplay.exe يستخدم Chromium مدمجاً عبر Electron 44.4.5.
 - أول تثبيت يحتاج إنترنت لتنزيل runtime الرسمي إذا لم يتم وضع electron-v44.4.5-win32-x64.zip داخل desktop-runtime بجوار الـInstaller.
 - بعد التثبيت لا يعتمد البرنامج على Edge أو Chrome.
 
 إزالة البرنامج
 ------------
 - شغّل Uninstall-PlayZone-Service.bat باستخدام Run as administrator.
-- ملف الـUninstall موجود في حزمة العميل، ويُنسخ أيضاً إلى C:\Program Files\nourxplay أثناء التثبيت.
+- ملف الـUninstall موجود في حزمة العميل، ويُنسخ أيضاً إلى C:\Program Files\ZoneXplay أثناء التثبيت.
 - الإزالة العادية تحتفظ بقاعدة البيانات والـBackups داخل ProgramData.
 - للحذف الكامل للبيانات شغّل: Uninstall-PlayZone-Service.bat /RemoveData
 
