@@ -41,10 +41,38 @@ function Find-TailscaleExe {
     return $null
 }
 
+function Suppress-TailscaleTray {
+    # Keep the Tailscale Windows service running, but hide the per-user tray GUI.
+    Get-Process -Name 'tailscale-ipn' -ErrorAction SilentlyContinue |
+        Stop-Process -Force -ErrorAction SilentlyContinue
+
+    $startupFolders = @(
+        [Environment]::GetFolderPath('CommonStartup'),
+        [Environment]::GetFolderPath('Startup')
+    ) | Where-Object { $_ } | Select-Object -Unique
+    foreach ($folder in $startupFolders) {
+        Remove-Item -LiteralPath (Join-Path $folder 'Tailscale.lnk') -Force -ErrorAction SilentlyContinue
+    }
+
+    if ($env:ProgramData) {
+        Remove-Item -LiteralPath (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\Startup\Tailscale.lnk') -Force -ErrorAction SilentlyContinue
+    }
+
+    foreach ($runKey in @(
+        'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Run',
+        'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run'
+    )) {
+        if (Test-Path -LiteralPath $runKey) {
+            Remove-ItemProperty -LiteralPath $runKey -Name 'Tailscale' -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 function Ensure-BundledTailscale {
     $existingExe = Find-TailscaleExe
     if ($existingExe) {
         Write-Host 'Tailscale runtime already installed; keeping the existing installation.' -ForegroundColor Green
+        Suppress-TailscaleTray
         return $existingExe
     }
 
@@ -80,7 +108,11 @@ function Ensure-BundledTailscale {
     $arguments = @(
         '/i', ('"' + $msiPath + '"'),
         '/qn', '/norestart',
-        'TS_UNATTENDEDMODE=always'
+        'TS_NOLAUNCH=1',
+        'TS_UNATTENDEDMODE=always',
+        'TS_PREFERENCESMENU=hide',
+        'TS_UPDATEMENU=hide',
+        'TS_TESTMENU=hide'
     )
     $proc = Start-Process -FilePath 'msiexec.exe' -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden
     if ($proc.ExitCode -notin @(0,3010)) { Fail "Tailscale silent installation failed with exit code $($proc.ExitCode)" }
@@ -88,12 +120,13 @@ function Ensure-BundledTailscale {
     $exe = Find-TailscaleExe
     if (-not $exe) { Fail 'Tailscale installation completed but tailscale.exe was not found.' }
 
-    Write-Host 'Official Tailscale client installed. The normal Tailscale tray/UI remains available.' -ForegroundColor Green
+    Suppress-TailscaleTray
+    Write-Host 'Tailscale installed as a background Windows service; tray UI is hidden.' -ForegroundColor Green
     return $exe
 }
 
-Write-Host 'ZoneXplay v0.35.2 - Local Production Edition' -ForegroundColor Green
-Write-Host 'Local backend + standard Tailscale client + private Tailscale Serve support. Cloud Sync is disabled.'
+Write-Host 'ZoneXplay v0.35.3 - Local Production Edition' -ForegroundColor Green
+Write-Host 'Local backend + hidden-tray Tailscale service + private Tailscale Serve support. Cloud Sync is disabled.'
 Write-Host 'Python, Electron and the official Tailscale client are bundled for local production installation.'
 
 Step 'Stopping previous ZoneXplay service'
@@ -238,7 +271,7 @@ if ($rootStatus -eq 3) {
     if ($NonInteractive) {
         Fail 'ROOT password setup is required before a non-interactive installation can continue.'
     }
-    Write-Host 'ROOT password setup is required for ZoneXplay v0.35.2 Local Production Edition.' -ForegroundColor Yellow
+    Write-Host 'ROOT password setup is required for ZoneXplay v0.35.3 Local Production Edition.' -ForegroundColor Yellow
     while ($true) {
         $secure1 = Read-Host 'Enter a new ROOT password (minimum 12 characters)' -AsSecureString
         $secure2 = Read-Host 'Confirm ROOT password' -AsSecureString
@@ -287,13 +320,14 @@ if ($LASTEXITCODE -ne 0) { Fail "Windows Service install failed with exit code $
 & sc.exe failure $ServiceName reset= 86400 actions= restart/5000/restart/15000/restart/30000 | Out-Null
 & sc.exe failureflag $ServiceName 1 | Out-Null
 
-Step 'Configuring Tailscale + Serve recovery'
+Step 'Configuring hidden-tray Tailscale + Serve recovery'
 $TailscaleService = Get-Service -Name 'Tailscale' -ErrorAction SilentlyContinue
 if (-not $TailscaleService) { Fail 'Tailscale Windows service was not created by the bundled runtime.' }
 & sc.exe config Tailscale start= auto | Out-Null
 & sc.exe failure Tailscale reset= 86400 actions= restart/5000/restart/15000/restart/30000 | Out-Null
 & sc.exe failureflag Tailscale 1 | Out-Null
 Start-Service -Name 'Tailscale' -ErrorAction SilentlyContinue
+Suppress-TailscaleTray
 
 Step 'Configuring Voltra firewall'
 & netsh.exe advfirewall firewall delete rule name='PlayZone Manager Voltra TCP' | Out-Null
