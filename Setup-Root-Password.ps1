@@ -8,10 +8,10 @@ $SecureDataRoot = Join-Path $DataRoot 'secure-data'
 $env:PLAYZONE_DB_PATH = Join-Path $SecureDataRoot 'playzone.db'
 
 if (-not (Test-Path -LiteralPath $Python)) {
-    throw "nourxplay runtime not found. Install nourxplay first: $Python"
+    throw "ZoneXplay runtime not found. Install ZoneXplay first: $Python"
 }
 
-Write-Host 'nourxplay v0.35.0 - ROOT Password Setup' -ForegroundColor Cyan
+Write-Host 'ZoneXplay v0.35.2 - ROOT Password Setup' -ForegroundColor Cyan
 Write-Host 'This resets the ROOT password locally and invalidates existing ROOT login tokens.'
 
 while ($true) {
