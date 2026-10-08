@@ -1,6 +1,6 @@
 @echo off
 setlocal
-title nourxplay - Uninstall
+title ZoneXplay - Uninstall
 
 net session >nul 2>&1
 if not "%errorlevel%"=="0" (
@@ -19,12 +19,12 @@ if not exist "%~dp0Uninstall-PlayZone-Service.ps1" (
 )
 
 echo.
-echo nourxplay - Uninstaller
+echo ZoneXplay - Uninstaller
 echo ==============================
 echo.
 echo By default, financial data and backups are preserved.
 echo To remove protected data too, run:
-echo   Uninstall-nourxplay.bat /RemoveData
+echo   Uninstall-ZoneXplay.bat /RemoveData
 echo.
 
 set "EXTRA_ARGS="
@@ -38,7 +38,7 @@ echo.
 if not "%RC%"=="0" (
   echo [ERROR] Uninstall failed with exit code %RC%.
 ) else (
-  echo nourxplay uninstall completed.
+  echo ZoneXplay uninstall completed.
 )
 pause
 exit /b %RC%
