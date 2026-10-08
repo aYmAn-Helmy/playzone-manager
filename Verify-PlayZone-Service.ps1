@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Continue'
 $ServiceName='PlayZoneManager'
-$DataRoot=Join-Path $env:ProgramData 'nourxplay'
-Write-Host 'nourxplay Service Verification' -ForegroundColor Cyan
+$DataRoot=Join-Path $env:ProgramData 'PlayZone Manager'
+Write-Host 'ZoneXplay Service Verification' -ForegroundColor Cyan
 $svc=Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 Write-Host ('Service      : ' + $(if($svc){$svc.Status}else{'MISSING'}))
 try {
