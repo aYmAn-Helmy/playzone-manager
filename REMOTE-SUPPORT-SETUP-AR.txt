@@ -1,9 +1,9 @@
-nourxplay v0.31 - Remote Support Edition
+ZoneXplay v0.31 - Remote Support Edition
 ================================================
 
 الفكرة الأمنية
 --------------
-- nourxplay Web Backend يظل على 127.0.0.1:8000 فقط.
+- ZoneXplay Web Backend يظل على 127.0.0.1:8000 فقط.
 - لا يتم فتح Port 8000 على الراوتر أو LAN.
 - Remote Support يستخدم Tailscale Serve HTTPS داخل الـTailnet فقط.
 - لا تستخدم Tailscale Funnel لهذا النظام.
@@ -11,7 +11,7 @@ nourxplay v0.31 - Remote Support Edition
 
 أول تثبيت / ترقية من v0.30
 ---------------------------
-1) شغّل Install-PlayZone-Service.bat كمسؤول.
+1) شغّل Install-ZoneXplay.bat كمسؤول.
 2) إذا لم يكن ROOT مؤمناً من قبل، سيطلب Installer كلمة مرور ROOT جديدة.
    الحد الأدنى 12 حرفاً.
 3) كلمة المرور لا يتم وضعها في Command Line ولا يتم تسجيلها في Logs.
@@ -20,13 +20,13 @@ nourxplay v0.31 - Remote Support Edition
 إعداد Tailscale Remote Support
 -------------------------------
 1) ثبّت Tailscale على جهاز العميل.
-2) شغّل Setup-Tailscale-Support.bat كمسؤول.
+2) شغّل Setup-ZoneXplay-Remote-Support.bat كمسؤول.
 3) أكمل ربط الجهاز بالـTailnet إذا طُلب منك ذلك.
 4) السكربت ينفذ Private Serve إلى:
    http://127.0.0.1:8000
    عبر HTTPS على Tailscale فقط.
 5) بعد نجاح الإعداد سيظهر رابط مثل:
-   https://nourxplay-client-pc.<tailnet>.ts.net
+   https://ZoneXplay-client-pc.<tailnet>.ts.net
 
 من داخل ROOT
 ------------
@@ -46,10 +46,10 @@ nourxplay v0.31 - Remote Support Edition
 
 Tag مقترح
 ---------
-tag:nourxplay-client
+tag:ZoneXplay-client
 
 يمكن تمرير Tag يدوياً إلى PowerShell:
-  powershell -ExecutionPolicy Bypass -File .\Setup-Tailscale-Support.ps1 -Tag tag:nourxplay-client
+  powershell -ExecutionPolicy Bypass -File .\Setup-Tailscale-Support.ps1 -Tag tag:ZoneXplay-client
 
 يجب أن تسمح سياسة الـTailnet لهذا الجهاز باستخدام الـTag.
 
@@ -58,18 +58,18 @@ tag:nourxplay-client
 يوجد أيضاً ملف جاهز للتعديل: TAILSCALE-GRANTS-EXAMPLE.json
 {
   "tagOwners": {
-    "tag:nourxplay-client": ["YOUR_SUPPORT_EMAIL@example.com"]
+    "tag:ZoneXplay-client": ["YOUR_SUPPORT_EMAIL@example.com"]
   },
   "grants": [
     {
       "src": ["YOUR_SUPPORT_EMAIL@example.com"],
-      "dst": ["tag:nourxplay-client"],
+      "dst": ["tag:ZoneXplay-client"],
       "ip": ["443"]
     }
   ]
 }
 
-الفكرة: حساب الدعم المحدد فقط يصل إلى أجهزة العملاء المعلّمة tag:nourxplay-client على HTTPS 443.
+الفكرة: حساب الدعم المحدد فقط يصل إلى أجهزة العملاء المعلّمة tag:ZoneXplay-client على HTTPS 443.
 ادمج هذا الجزء مع policy الحالية ولا تستبدل policy كاملة بدون مراجعة.
 
 إيقاف Remote Support
