@@ -1,7 +1,7 @@
 {
-  "name": "nourxplay-desktop",
-  "productName": "nourxplay",
-  "version": "0.35.1",
+  "name": "zonexplay-desktop",
+  "productName": "ZoneXplay",
+  "version": "0.35.2",
   "private": true,
   "main": "main.js"
 }
