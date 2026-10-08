@@ -315,7 +315,7 @@ def reconnect() -> dict:
     if not status["installed"]:
         raise TailscaleSupportError("مكوّن Remote Support غير مثبت. أعد تشغيل Install-ZoneXplay.bat كمسؤول.")
     if status["needs_login"]:
-        raise TailscaleSupportError("الجهاز غير مربوط بالـTailnet. استخدم Auth Key من صفحة ROOT مرة واحدة.")
+        raise TailscaleSupportError("الجهاز غير مربوط بالـTailnet. افتح Tailscale واعمل Sign in مرة واحدة، أو استخدم Auth Key من صفحة ROOT.")
 
     exe = _find_tailscale()
     if not exe:
