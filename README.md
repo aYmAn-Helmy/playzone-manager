@@ -1,14 +1,14 @@
-# nourxplay
+# ZoneXplay
 
-Current Windows client baseline: **v0.35.1 White Label + Bundled Headless Remote Support + Desktop Edition**.
+Current Windows client baseline: **v0.35.2 Local Production + Standard Tailscale + Desktop Edition**.
 
-nourxplay is the cashier/session-management application with embedded Voltra screen-power management and ROOT-only remote support.
+ZoneXplay is the cashier/session-management application with embedded Voltra screen-power management and ROOT-only remote support.
 
 ## v0.35 white-label highlights
 
-- Presents the customer-facing product under the **nourxplay** brand.
+- Presents the customer-facing product under the **ZoneXplay** brand.
 - Adds a self-contained Electron/Chromium desktop client instead of depending on Microsoft Edge or Chrome.
-- The local nourxplay backend remains bound to `127.0.0.1:8000`.
+- The local ZoneXplay backend remains bound to `127.0.0.1:8000`.
 - Adds a responsive UI for desktop, tablet, and mobile screens.
 - Desktop keeps an auto-hide sidebar; tablet/mobile use a touch drawer.
 - Station grids, tables, forms, and modals adapt for smaller touch screens.
@@ -17,8 +17,8 @@ nourxplay is the cashier/session-management application with embedded Voltra scr
 - ROOT password remains mandatory.
 - Remote support remains available through Tailscale Serve.
 - The customer installer bundles the official Tailscale MSI and installs it silently as a Windows service.
-- The Tailscale tray GUI is suppressed in customer mode; nourxplay manages the service and Serve in the background.
-- The nourxplay Windows Service automatically restores Tailscale and private HTTPS Serve if either stops or Serve is cleared.
+- The standard Tailscale tray GUI remains available while ZoneXplay keeps the Windows service and private Serve resilient.
+- The ZoneXplay Windows Service automatically restores Tailscale and private HTTPS Serve if either stops or Serve is cleared.
 - The verified offline Python runtime and dependency wheels are included under `offline-runtime/`.
 - Cash-drawer settlement is admin-password protected; staff expenses remain pending until an ADMIN/ROOT approves or rejects them.
 - Drawer settlement can occur while PlayStation sessions remain active; those sessions continue and are billed into the shift that is open when payment is finalized.
@@ -43,11 +43,11 @@ Main Windows service/runtime files include:
 - `desktop-shell/`
 - `desktop-runtime/`
 - `offline-runtime/`
-- `Install-nourxplay.bat`
+- `Install-ZoneXplay.bat`
 - `Install-PlayZone-Service.ps1`
-- `Uninstall-nourxplay.bat`
-- `Setup-nourxplay-Root-Password.bat`
-- `Setup-nourxplay-Remote-Support.bat`
+- `Uninstall-ZoneXplay.bat`
+- `Setup-ZoneXplay-Root-Password.bat`
+- `Setup-ZoneXplay-Remote-Support.bat`
 
 ## Desktop runtime
 
@@ -56,7 +56,7 @@ The installer uses Electron 44.4.5 for the embedded Chromium desktop client. It 
 ## Remote support design
 
 ```text
-nourxplay backend
+ZoneXplay backend
 127.0.0.1:8000
       |
       v
@@ -70,4 +70,4 @@ The application backend is intentionally not exposed on `0.0.0.0:8000`.
 
 ## Railway / historical staging files
 
-The repository still contains earlier Railway/staging support files and historical runtime patches for compatibility and reference. The Windows client source under `backend/` and `frontend/` is now at **v0.35.1**.
+The repository still contains earlier Railway/staging support files and historical runtime patches for compatibility and reference. The Windows client source under `backend/` and `frontend/` is now at **v0.35.2**.
