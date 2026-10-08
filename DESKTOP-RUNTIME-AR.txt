@@ -1,8 +1,8 @@
-nourxplay v0.33 - Desktop Browser Runtime
+ZoneXplay v0.33 - Desktop Browser Runtime
 ================================================
 
 النسخة لا تعتمد على Microsoft Edge أو Google Chrome لعرض واجهة البرنامج.
-بعد التثبيت يتم تشغيل الواجهة داخل nourxplay.exe باستخدام Electron/Chromium.
+بعد التثبيت يتم تشغيل الواجهة داخل ZoneXplay.exe باستخدام Electron/Chromium.
 
 أول تثبيت
 ---------
@@ -17,7 +17,7 @@ nourxplay v0.33 - Desktop Browser Runtime
 
 بعد التثبيت
 -----------
-- Shortcut يشغّل nourxplay.exe مباشرة.
+- Shortcut يشغّل ZoneXplay.exe مباشرة.
 - الـBackend يظل Windows Service على 127.0.0.1:8000.
-- Chromium المدمج يمنع التنقل خارج خدمة nourxplay المحلية.
+- Chromium المدمج يمنع التنقل خارج خدمة ZoneXplay المحلية.
 - DevTools معطلة داخل تطبيق الكاشير.
