@@ -61,7 +61,7 @@ def set_root_password(password: str) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="nourxplay ROOT password setup")
+    parser = argparse.ArgumentParser(description="ZoneXplay ROOT password setup")
     parser.add_argument("command", choices=("status", "set"))
     args = parser.parse_args()
 
