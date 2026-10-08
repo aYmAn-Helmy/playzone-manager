@@ -1,4 +1,4 @@
-﻿ZoneXplay v0.35.2 - Secure Cash Drawer + Remote Support
+﻿ZoneXplay v0.35.3 - Secure Cash Drawer + Remote Support
 ===============================================
 
 التشغيل المحلي
@@ -15,7 +15,7 @@ Windows Boot -> PlayZoneManager Service -> Local Web http://127.0.0.1:8000
 - Voltra TCP 10086 + Internal API 8086
 - Local Web 127.0.0.1:8000
 - Windows Service يبدأ تلقائياً مع Windows
-- Tailscale Remote Support مدمج في Installer كنسخة Windows عادية مع Tray GUI وPrivate Serve
+- Tailscale Remote Support مدمج في Installer ويعمل كخدمة Windows مع Tray مخفي وPrivate Serve
 - Cloud Sync: Disabled
 
 التثبيت
@@ -29,7 +29,7 @@ Windows Boot -> PlayZoneManager Service -> Local Web http://127.0.0.1:8000
 Remote Support
 --------------
 - لا يحتاج العميل لتثبيت أو تشغيل Tailscale يدوياً؛ ZoneXplay Full Installer يثبت خدمة Tailscale تلقائياً وبشكل Silent.
-- Tailscale يعمل بشكل طبيعي وتظل أيقونة الـTray والواجهة متاحة للمستخدم.
+- Tailscale يعمل في الخلفية كخدمة Windows، والـTray GUI مخفي على جهاز العميل.
 - يمكن ربط الجهاز بالـTailnet بالطريقة العادية من Tailscale أو من إعداد Remote Support.
 - ZoneXplay يظل على 127.0.0.1:8000 ولا يتم فتح Port Forwarding.
 - Tailscale Serve يعرض الواجهة داخل الـTailnet فقط عبر HTTPS.
