@@ -1,0 +1,266 @@
+name: Build ZoneXplay v0.35.2 Local Production
+
+on:
+  push:
+    branches:
+      - release/zonexplay-local-production-v0352
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate source and branding
+        shell: pwsh
+        run: |
+          if ((Get-Content VERSION.txt -Raw).Trim() -ne '0.35.2') { throw 'VERSION mismatch.' }
+
+          python -m py_compile backend/app/main.py backend/app/services.py backend/app/windows_service.py backend/app/tailscale_support.py backend/app/root_setup.py
+          node --check frontend/dist/assets/index-v031.js
+          node --check frontend/dist/playzone-responsive.js
+          node --check desktop-shell/main.js
+
+          foreach ($file in @(
+            'Install-PlayZone-Service.ps1',
+            'Launch-PlayZone.ps1',
+            'Setup-Tailscale-Support.ps1',
+            'Setup-Root-Password.ps1',
+            'Uninstall-PlayZone-Service.ps1',
+            'Verify-PlayZone-Service.ps1'
+          )) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($file,[ref]$tokens,[ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) { throw "$file syntax error: $($errors[0].Message)" }
+          }
+
+          $ui = Get-Content frontend/dist/assets/index-v031.js -Raw
+          $html = Get-Content frontend/dist/index.html -Raw
+          $desktop = Get-Content desktop-shell/main.js -Raw
+          $pkg = Get-Content desktop-shell/package.json -Raw
+          $installer = Get-Content Install-PlayZone-Service.ps1 -Raw
+          $service = Get-Content backend/app/windows_service.py -Raw
+          $tailscale = Get-Content backend/app/tailscale_support.py -Raw
+          $backend = Get-Content backend/app/main.py -Raw
+
+          if ($ui.Contains('nourxplay')) { throw 'Old nourxplay brand remains in customer UI.' }
+          if (-not $ui.Contains('ZoneXplay')) { throw 'ZoneXplay brand missing from UI.' }
+          if (-not $html.Contains('<title>ZoneXplay</title>')) { throw 'HTML title mismatch.' }
+          if (-not $desktop.Contains("app.setName('ZoneXplay')")) { throw 'Electron app name mismatch.' }
+          if (-not $pkg.Contains('"productName": "ZoneXplay"')) { throw 'Desktop productName mismatch.' }
+          if (-not $pkg.Contains('"version": "0.35.2"')) { throw 'Desktop version mismatch.' }
+          if (-not $backend.Contains('FastAPI(title="ZoneXplay API", version="0.35.2")')) { throw 'Backend brand/version mismatch.' }
+          if (-not $service.Contains('SERVICE_DISPLAY_NAME = "ZoneXplay Service"')) { throw 'Service display name mismatch.' }
+
+          if (-not $installer.Contains("'ZoneXplay.exe'")) { throw 'Installer does not create ZoneXplay.exe.' }
+          if (-not $installer.Contains("'ZoneXplay.lnk'")) { throw 'Installer does not create ZoneXplay shortcut.' }
+          if (-not $installer.Contains("ZoneXplay v0.35.2 - Local Production Edition")) { throw 'Installer edition label mismatch.' }
+
+          if ($installer.Contains('TS_NOLAUNCH')) { throw 'Tailscale launch is still suppressed.' }
+          if ($installer.Contains('Suppress-TailscaleTray')) { throw 'Tailscale tray suppression remains.' }
+          if ($installer.Contains('TS_PREFERENCESMENU=hide')) { throw 'Tailscale preferences menu is still hidden.' }
+          if ($service.Contains('PLAYZONE_TAILSCALE_HEADLESS')) { throw 'Headless Tailscale environment remains.' }
+          if (-not $installer.Contains('TS_UNATTENDEDMODE=always')) { throw 'Tailscale unattended resilience missing.' }
+          if (-not $tailscale.Contains('return f"zonexplay-{safe}"[:63]')) { throw 'Tailscale hostname branding mismatch.' }
+
+          foreach ($file in @(
+            'Install-ZoneXplay.bat',
+            'Uninstall-ZoneXplay.bat',
+            'Setup-ZoneXplay-Remote-Support.bat',
+            'Setup-ZoneXplay-Root-Password.bat',
+            'README-ZONEXPLAY-AR.txt'
+          )) {
+            if (-not (Test-Path -LiteralPath $file)) { throw "Missing customer file: $file" }
+          }
+
+          Write-Host 'ZONEXPLAY_PRODUCTION_SOURCE_OK'
+
+      - name: Prepare clean customer package
+        shell: pwsh
+        run: |
+          $pkgRoot = Join-Path $PWD 'package'
+          New-Item -ItemType Directory -Force -Path $pkgRoot | Out-Null
+
+          foreach ($dir in @('backend','frontend','offline-runtime','desktop-shell')) {
+            Copy-Item -LiteralPath $dir -Destination (Join-Path $pkgRoot $dir) -Recurse -Force
+          }
+
+          New-Item -ItemType Directory -Force -Path (Join-Path $pkgRoot 'desktop-runtime') | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $pkgRoot 'tailscale-runtime') | Out-Null
+
+          foreach ($file in @(
+            'Bootstrap-Portable.ps1',
+            'Install-PlayZone-Service.bat',
+            'Install-PlayZone-Service.ps1',
+            'Install-ZoneXplay.bat',
+            'Launch-PlayZone.ps1',
+            'Uninstall-PlayZone-Service.bat',
+            'Uninstall-PlayZone-Service.ps1',
+            'Uninstall-ZoneXplay.bat',
+            'Setup-Root-Password.bat',
+            'Setup-Root-Password.ps1',
+            'Setup-ZoneXplay-Root-Password.bat',
+            'Setup-Tailscale-Support.bat',
+            'Setup-Tailscale-Support.ps1',
+            'Setup-ZoneXplay-Remote-Support.bat',
+            'REMOTE-SUPPORT-SETUP-AR.txt',
+            'TAILSCALE-GRANTS-EXAMPLE.json',
+            'README-ZONEXPLAY-AR.txt',
+            'README-SERVICE-AR.txt',
+            'DESKTOP-RUNTIME-AR.txt',
+            'PlayStation.ico',
+            'VERSION.txt'
+          )) {
+            if (Test-Path -LiteralPath $file) {
+              Copy-Item -LiteralPath $file -Destination $pkgRoot -Force
+            }
+          }
+
+          Get-ChildItem -LiteralPath $pkgRoot -Recurse -Directory -Force |
+            Where-Object { $_.Name -in @('__pycache__','.pytest_cache','.git','.github','node_modules') } |
+            Sort-Object FullName -Descending |
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+          Get-ChildItem -LiteralPath $pkgRoot -Recurse -File -Force |
+            Where-Object { $_.Extension -in @('.pyc','.pyo','.log','.db','.sqlite','.sqlite3') } |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+
+          @'
+          ZoneXplay v0.35.2
+          =================
+
+          Local Production Full Client
+
+          التثبيت:
+          1) فك الضغط بالكامل.
+          2) شغّل Install-ZoneXplay.bat باستخدام Run as administrator.
+          3) أول مرة سيطلب ROOT Password إذا لم يكن مضبوطاً.
+          4) Tailscale الرسمي موجود داخل النسخة ويتم تثبيته مع البرنامج.
+          5) Tailscale يعمل كبرنامج Windows عادي وتظل أيقونة الـTray والواجهة متاحة.
+          6) ZoneXplay يعمل Local على 127.0.0.1:8000، وRemote Support عبر Tailscale Serve فقط.
+
+          هذه النسخة Local Production ولا تعتمد على Control Center أو Cloud Sync.
+
+          الإزالة:
+          - Uninstall-ZoneXplay.bat
+
+          حذف بيانات جهاز اختبار بالكامل فقط:
+          - Uninstall-ZoneXplay.bat /RemoveData
+          '@ | Set-Content -LiteralPath (Join-Path $pkgRoot 'START-HERE-ZONEXPLAY-AR.txt') -Encoding UTF8
+
+          @"
+          Product: ZoneXplay
+          Version: 0.35.2
+          Edition: Local Production
+          Source branch: release/zonexplay-local-production-v0352
+          Source commit: $env:GITHUB_SHA
+          Tailscale: standard Windows client + service + private Serve
+          Cloud Sync: disabled
+          "@ | Set-Content -LiteralPath (Join-Path $pkgRoot 'BUILD-INFO.txt') -Encoding UTF8
+
+      - name: Bundle verified Electron runtime
+        shell: pwsh
+        run: |
+          $version = '44.4.5'
+          $name = "electron-v$version-win32-x64.zip"
+          $url = "https://github.com/electron/electron/releases/download/v$version/$name"
+          $expected = '11c395820a5aaa8ebcc0686b476d0ac98a730274ebfbdc8cf5538a7c2815cb5d'
+          $dest = Join-Path $PWD "package\desktop-runtime\$name"
+          Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $dest
+          $actual = (Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Electron SHA256 mismatch: $actual" }
+
+      - name: Bundle verified Tailscale client
+        shell: pwsh
+        run: |
+          $version = '1.102.4'
+          $name = "tailscale-setup-$version-amd64.msi"
+          $url = "https://dl.tailscale.com/stable/$name"
+          $dest = Join-Path $PWD "package\tailscale-runtime\$name"
+          $shaDest = "$dest.sha256"
+
+          Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $dest
+          Invoke-WebRequest -UseBasicParsing -Uri "$url.sha256" -OutFile $shaDest
+
+          $checksumText = (Get-Content -LiteralPath $shaDest -Raw).Trim()
+          $match = [regex]::Match($checksumText, '(?i)\b[0-9a-f]{64}\b')
+          if (-not $match.Success) { throw 'Tailscale checksum file invalid.' }
+
+          $actual = (Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $match.Value.ToLowerInvariant()) { throw "Tailscale SHA256 mismatch: $actual" }
+
+          $signature = Get-AuthenticodeSignature -FilePath $dest
+          if ($signature.Status -ne 'Valid') { throw "Tailscale signature status: $($signature.Status)" }
+          if (-not ($signature.SignerCertificate.Subject -match 'Tailscale')) { throw "Unexpected signer: $($signature.SignerCertificate.Subject)" }
+
+          Write-Host "TAILSCALE_SHA256=$actual"
+
+      - name: Final package audit
+        shell: pwsh
+        run: |
+          $required = @(
+            'package\Install-ZoneXplay.bat',
+            'package\Uninstall-ZoneXplay.bat',
+            'package\Setup-ZoneXplay-Remote-Support.bat',
+            'package\Setup-ZoneXplay-Root-Password.bat',
+            'package\offline-runtime\python-3.12.6-embed-amd64.zip',
+            'package\desktop-runtime\electron-v44.4.5-win32-x64.zip',
+            'package\tailscale-runtime\tailscale-setup-1.102.4-amd64.msi',
+            'package\tailscale-runtime\tailscale-setup-1.102.4-amd64.msi.sha256',
+            'package\README-ZONEXPLAY-AR.txt',
+            'package\START-HERE-ZONEXPLAY-AR.txt',
+            'package\VERSION.txt'
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path -LiteralPath $path)) { throw "Missing package file: $path" }
+          }
+
+          if ((Get-Content package\VERSION.txt -Raw).Trim() -ne '0.35.2') { throw 'Package version mismatch.' }
+
+          $customerText = @(
+            (Get-Content package\frontend\dist\assets\index-v031.js -Raw),
+            (Get-Content package\frontend\dist\index.html -Raw),
+            (Get-Content package\desktop-shell\main.js -Raw),
+            (Get-Content package\README-ZONEXPLAY-AR.txt -Raw),
+            (Get-Content package\START-HERE-ZONEXPLAY-AR.txt -Raw)
+          ) -join [Environment]::NewLine
+          if ($customerText -match '(?i)nourxplay') { throw 'Old nourxplay brand leaked into customer-facing package.' }
+
+          $installer = Get-Content package\Install-PlayZone-Service.ps1 -Raw
+          if ($installer.Contains('TS_NOLAUNCH') -or $installer.Contains('Suppress-TailscaleTray')) {
+            throw 'Package still suppresses normal Tailscale UI.'
+          }
+
+          $bad = Get-ChildItem -LiteralPath package -Recurse -Force | Where-Object {
+            $_.Name -in @('__pycache__','.pytest_cache','.git','.github','node_modules') -or
+            $_.Extension -in @('.db','.sqlite','.sqlite3','.log','.pyc','.pyo')
+          }
+          if ($bad) { throw "Unexpected package content: $($bad.FullName -join ', ')" }
+
+          Write-Host 'ZONEXPLAY_LOCAL_PRODUCTION_PACKAGE_OK'
+
+      - name: Create ZIP
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          $zip = 'out\ZoneXplay-v0.35.2-Local-Production-Full.zip'
+          Compress-Archive -Path package\* -DestinationPath $zip -CompressionLevel Optimal -Force
+          $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $hash | Set-Content "$zip.sha256" -Encoding ASCII
+          Write-Host "ZONEXPLAY_SHA256=$hash"
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZoneXplay-v0.35.2-Local-Production-Full
+          path: out/*
+          if-no-files-found: error
+          retention-days: 14
