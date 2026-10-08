@@ -41,41 +41,10 @@ function Find-TailscaleExe {
     return $null
 }
 
-function Suppress-TailscaleTray {
-    # tailscaled.exe is the Windows service. tailscale-ipn.exe is only the
-    # per-user tray GUI and is not required for unattended Remote Support.
-    Get-Process -Name 'tailscale-ipn' -ErrorAction SilentlyContinue |
-        Stop-Process -Force -ErrorAction SilentlyContinue
-
-    $startupFolders = @(
-        [Environment]::GetFolderPath('CommonStartup'),
-        [Environment]::GetFolderPath('Startup')
-    ) | Where-Object { $_ } | Select-Object -Unique
-    foreach ($folder in $startupFolders) {
-        Remove-Item -LiteralPath (Join-Path $folder 'Tailscale.lnk') -Force -ErrorAction SilentlyContinue
-    }
-
-    # Clean the all-users startup shortcut that current/older Tailscale
-    # installers may create. Keep Start Menu/admin tools installed.
-    if ($env:ProgramData) {
-        Remove-Item -LiteralPath (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\Startup\Tailscale.lnk') -Force -ErrorAction SilentlyContinue
-    }
-
-    foreach ($runKey in @(
-        'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Run',
-        'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run'
-    )) {
-        if (Test-Path -LiteralPath $runKey) {
-            Remove-ItemProperty -LiteralPath $runKey -Name 'Tailscale' -Force -ErrorAction SilentlyContinue
-        }
-    }
-}
-
 function Ensure-BundledTailscale {
     $existingExe = Find-TailscaleExe
     if ($existingExe) {
         Write-Host 'Tailscale runtime already installed; keeping the existing installation.' -ForegroundColor Green
-        Suppress-TailscaleTray
         return $existingExe
     }
 
@@ -91,7 +60,7 @@ function Ensure-BundledTailscale {
             Invoke-WebRequest -UseBasicParsing -Uri $TailscaleMsiUrl -OutFile $msiPath
             Invoke-WebRequest -UseBasicParsing -Uri $TailscaleShaUrl -OutFile $shaPath
         } catch {
-            Fail "Could not obtain the Tailscale runtime. Use the Full nourxplay package or connect this PC to the internet once. $($_.Exception.Message)"
+            Fail "Could not obtain the Tailscale runtime. Use the Full ZoneXplay package or connect this PC to the internet once. $($_.Exception.Message)"
         }
     }
 
@@ -111,11 +80,7 @@ function Ensure-BundledTailscale {
     $arguments = @(
         '/i', ('"' + $msiPath + '"'),
         '/qn', '/norestart',
-        'TS_NOLAUNCH=1',
-        'TS_UNATTENDEDMODE=always',
-        'TS_PREFERENCESMENU=hide',
-        'TS_UPDATEMENU=hide',
-        'TS_TESTMENU=hide'
+        'TS_UNATTENDEDMODE=always'
     )
     $proc = Start-Process -FilePath 'msiexec.exe' -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden
     if ($proc.ExitCode -notin @(0,3010)) { Fail "Tailscale silent installation failed with exit code $($proc.ExitCode)" }
@@ -123,16 +88,15 @@ function Ensure-BundledTailscale {
     $exe = Find-TailscaleExe
     if (-not $exe) { Fail 'Tailscale installation completed but tailscale.exe was not found.' }
 
-    Suppress-TailscaleTray
-    Write-Host 'Private Remote Support runtime installed silently (no tray client).' -ForegroundColor Green
+    Write-Host 'Official Tailscale client installed. The normal Tailscale tray/UI remains available.' -ForegroundColor Green
     return $exe
 }
 
-Write-Host 'nourxplay v0.35.1 - Headless Remote Support Edition' -ForegroundColor Green
-Write-Host 'Local backend + private headless Tailscale Serve support. Cloud Sync is disabled.'
-Write-Host 'Python, Electron (Full package) and the Tailscale service runtime are bundled for customer installation.'
+Write-Host 'ZoneXplay v0.35.2 - Local Production Edition' -ForegroundColor Green
+Write-Host 'Local backend + standard Tailscale client + private Tailscale Serve support. Cloud Sync is disabled.'
+Write-Host 'Python, Electron and the official Tailscale client are bundled for local production installation.'
 
-Step 'Stopping previous nourxplay service'
+Step 'Stopping previous ZoneXplay service'
 $existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($existing) {
     if ($existing.Status -ne 'Stopped') {
@@ -156,7 +120,7 @@ Step 'Migrating financial data to protected storage'
 $SecureDb = Join-Path $SecureDataRoot 'playzone.db'
 $LegacyDb = Join-Path $DataRoot 'playzone.db'
 if ((Test-Path -LiteralPath $SecureDb) -and (Test-Path -LiteralPath $LegacyDb)) {
-    Fail "Both legacy and secure nourxplay databases exist. Installation stopped to avoid choosing the wrong financial database. Keep the correct database and move the other one aside, then run the installer again."
+    Fail "Both legacy and secure ZoneXplay databases exist. Installation stopped to avoid choosing the wrong financial database. Keep the correct database and move the other one aside, then run the installer again."
 }
 if (-not (Test-Path -LiteralPath $SecureDb) -and (Test-Path -LiteralPath $LegacyDb)) {
     foreach ($name in @('playzone.db','playzone.db-wal','playzone.db-shm')) {
@@ -165,7 +129,7 @@ if (-not (Test-Path -LiteralPath $SecureDb) -and (Test-Path -LiteralPath $Legacy
             Move-Item -LiteralPath $legacy -Destination (Join-Path $SecureDataRoot $name) -Force
         }
     }
-    Write-Host 'Existing nourxplay database moved into secure-data.' -ForegroundColor Green
+    Write-Host 'Existing ZoneXplay database moved into secure-data.' -ForegroundColor Green
 }
 
 $LegacyVoltra = Join-Path $DataRoot 'voltra.json'
@@ -219,9 +183,9 @@ foreach ($optionalFile in @(
     'Uninstall-PlayZone-Service.ps1','Uninstall-PlayZone-Service.bat',
     'Setup-Tailscale-Support.ps1','Setup-Tailscale-Support.bat',
     'Setup-Root-Password.ps1','Setup-Root-Password.bat',
-    'Install-nourxplay.bat','Uninstall-nourxplay.bat',
-    'Setup-nourxplay-Remote-Support.bat','Setup-nourxplay-Root-Password.bat',
-    'README-NOURXPLAY-AR.txt','REMOTE-SUPPORT-SETUP-AR.txt','TAILSCALE-GRANTS-EXAMPLE.json'
+    'Install-ZoneXplay.bat','Uninstall-ZoneXplay.bat',
+    'Setup-ZoneXplay-Remote-Support.bat','Setup-ZoneXplay-Root-Password.bat',
+    'README-ZONEXPLAY-AR.txt','REMOTE-SUPPORT-SETUP-AR.txt','TAILSCALE-GRANTS-EXAMPLE.json'
 )) {
     $src = Join-Path $SourceRoot $optionalFile
     if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination $InstallRoot -Force }
@@ -252,8 +216,8 @@ if ($lines -notcontains '..\..\backend') {
     Set-Content -LiteralPath $Pth -Value $lines -Encoding ASCII
 }
 
-& $Python -c "import app.main, win32serviceutil, uvicorn; print('nourxplay service runtime OK')"
-if ($LASTEXITCODE -ne 0) { Fail 'nourxplay service runtime import check failed.' }
+& $Python -c "import app.main, win32serviceutil, uvicorn; print('ZoneXplay service runtime OK')"
+if ($LASTEXITCODE -ne 0) { Fail 'ZoneXplay service runtime import check failed.' }
 
 Step 'Finalizing pywin32 for Windows Service support'
 $PostInstall = Get-ChildItem -LiteralPath (Join-Path $InstallRoot '.runtime\python') -Filter 'pywin32_postinstall.py' -File -Recurse | Select-Object -First 1 -ExpandProperty FullName
@@ -274,7 +238,7 @@ if ($rootStatus -eq 3) {
     if ($NonInteractive) {
         Fail 'ROOT password setup is required before a non-interactive installation can continue.'
     }
-    Write-Host 'ROOT password setup is required for nourxplay v0.35.1 Headless Remote Support Edition.' -ForegroundColor Yellow
+    Write-Host 'ROOT password setup is required for ZoneXplay v0.35.2 Local Production Edition.' -ForegroundColor Yellow
     while ($true) {
         $secure1 = Read-Host 'Enter a new ROOT password (minimum 12 characters)' -AsSecureString
         $secure2 = Read-Host 'Confirm ROOT password' -AsSecureString
@@ -323,19 +287,18 @@ if ($LASTEXITCODE -ne 0) { Fail "Windows Service install failed with exit code $
 & sc.exe failure $ServiceName reset= 86400 actions= restart/5000/restart/15000/restart/30000 | Out-Null
 & sc.exe failureflag $ServiceName 1 | Out-Null
 
-Step 'Configuring headless Tailscale + Serve always-on recovery'
+Step 'Configuring Tailscale + Serve recovery'
 $TailscaleService = Get-Service -Name 'Tailscale' -ErrorAction SilentlyContinue
 if (-not $TailscaleService) { Fail 'Tailscale Windows service was not created by the bundled runtime.' }
 & sc.exe config Tailscale start= auto | Out-Null
 & sc.exe failure Tailscale reset= 86400 actions= restart/5000/restart/15000/restart/30000 | Out-Null
 & sc.exe failureflag Tailscale 1 | Out-Null
 Start-Service -Name 'Tailscale' -ErrorAction SilentlyContinue
-Suppress-TailscaleTray
 
 Step 'Configuring Voltra firewall'
 & netsh.exe advfirewall firewall delete rule name='PlayZone Manager Voltra TCP' | Out-Null
-& netsh.exe advfirewall firewall delete rule name='nourxplay Voltra TCP' | Out-Null
-& netsh.exe advfirewall firewall add rule name='nourxplay Voltra TCP' dir=in action=allow protocol=TCP localport=10086 profile=any remoteip=localsubnet | Out-Null
+& netsh.exe advfirewall firewall delete rule name='ZoneXplay Voltra TCP' | Out-Null
+& netsh.exe advfirewall firewall add rule name='ZoneXplay Voltra TCP' dir=in action=allow protocol=TCP localport=10086 profile=any remoteip=localsubnet | Out-Null
 
 Step 'Preparing self-contained Chromium desktop runtime'
 $ElectronVersion = '44.4.5'
@@ -343,7 +306,7 @@ $ElectronArchive = "electron-v$ElectronVersion-win32-x64.zip"
 $ElectronUrl = "https://github.com/electron/electron/releases/download/v$ElectronVersion/$ElectronArchive"
 $ElectronSha256 = '11c395820a5aaa8ebcc0686b476d0ac98a730274ebfbdc8cf5538a7c2815cb5d'
 $DesktopRuntime = Join-Path $InstallRoot 'desktop-runtime'
-$DesktopExe = Join-Path $DesktopRuntime 'nourxplay.exe'
+$DesktopExe = Join-Path $DesktopRuntime 'ZoneXplay.exe'
 $BundledElectron = Join-Path (Join-Path $SourceRoot 'desktop-runtime') $ElectronArchive
 $ElectronCacheRoot = Join-Path $DataRoot 'cache'
 $CachedElectron = Join-Path $ElectronCacheRoot $ElectronArchive
@@ -367,7 +330,7 @@ if (Test-Path -LiteralPath $BundledElectron) {
         Invoke-WebRequest -UseBasicParsing -Uri $ElectronUrl -OutFile $TempElectron
         $ElectronZip = $TempElectron
     } catch {
-        Fail "Could not download the desktop browser runtime. Internet is required once during nourxplay installation unless $ElectronArchive is placed inside a desktop-runtime folder beside the installer. $($_.Exception.Message)"
+        Fail "Could not download the desktop browser runtime. Internet is required once during ZoneXplay installation unless $ElectronArchive is placed inside a desktop-runtime folder beside the installer. $($_.Exception.Message)"
     }
 }
 
@@ -381,7 +344,7 @@ Expand-Archive -LiteralPath $ElectronZip -DestinationPath $DesktopRuntime -Force
 if (-not (Test-Path -LiteralPath (Join-Path $DesktopRuntime 'electron.exe'))) { Fail 'Electron runtime extraction did not produce electron.exe.' }
 Move-Item -LiteralPath (Join-Path $DesktopRuntime 'electron.exe') -Destination $DesktopExe -Force
 if ($ElectronZip -eq $TempElectron) { Remove-Item -LiteralPath $TempElectron -Force -ErrorAction SilentlyContinue }
-if (-not (Test-Path -LiteralPath $DesktopExe)) { Fail 'nourxplay desktop executable was not created.' }
+if (-not (Test-Path -LiteralPath $DesktopExe)) { Fail 'ZoneXplay desktop executable was not created.' }
 Write-Host "Desktop browser ready: $DesktopExe" -ForegroundColor Green
 
 Step 'Creating verified desktop/start shortcuts'
@@ -393,13 +356,13 @@ function New-PlayZoneShortcut([string]$Folder) {
     if ([string]::IsNullOrWhiteSpace($Folder)) { return $null }
     try {
         New-Item -ItemType Directory -Force -Path $Folder | Out-Null
-        $path = Join-Path $Folder 'nourxplay.lnk'
+        $path = Join-Path $Folder 'ZoneXplay.lnk'
         Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
         $s = $WshShell.CreateShortcut($path)
         $s.TargetPath = $DesktopExe
         $s.Arguments = '"' + $DesktopShell + '"'
         $s.WorkingDirectory = $DesktopRuntime
-        $s.Description = 'nourxplay Desktop Edition'
+        $s.Description = 'ZoneXplay Desktop Edition'
         $s.IconLocation = (Join-Path $InstallRoot 'PlayStation.ico') + ',0'
         $s.Save()
         if (-not (Test-Path -LiteralPath $path)) { throw "Shortcut was not created: $path" }
@@ -473,7 +436,7 @@ $desktopFolders = @()
 $desktopFolders += @($userDesktopCandidates)
 $desktopFolders += @($commonDesktopCandidates)
 
-# Remove legacy branded shortcuts during upgrade so customers see only nourxplay.
+# Remove legacy branded shortcuts during upgrade so customers see only ZoneXplay.
 $legacyShortcutFolders = @(
     $desktopFolders
     [Environment]::GetFolderPath('CommonPrograms')
@@ -482,14 +445,16 @@ $legacyShortcutFolders = @(
     [Environment]::GetFolderPath('Startup')
 ) | Where-Object { $_ } | Select-Object -Unique
 foreach ($folder in $legacyShortcutFolders) {
-    Remove-Item -LiteralPath (Join-Path $folder 'PlayZone Manager.lnk') -Force -ErrorAction SilentlyContinue
+    foreach ($legacyName in @('PlayZone Manager.lnk','nourxplay.lnk')) {
+        Remove-Item -LiteralPath (Join-Path $folder $legacyName) -Force -ErrorAction SilentlyContinue
+    }
 }
 foreach ($folder in @($desktopFolders | Select-Object -Unique)) {
     $created = New-PlayZoneShortcut $folder
     if ($created) { $desktopShortcuts += $created }
 }
 if ($desktopShortcuts.Count -lt 1) {
-    Fail 'Could not create a verified nourxplay shortcut on any Windows Desktop location.'
+    Fail 'Could not create a verified ZoneXplay shortcut on any Windows Desktop location.'
 }
 
 # Start-menu and all-users Startup shortcuts are separate from the desktop shortcut.
@@ -503,7 +468,7 @@ foreach ($folder in @(
 $PrimaryDesktopShortcut = $desktopShortcuts[0]
 Write-Host "Desktop shortcut ready: $PrimaryDesktopShortcut" -ForegroundColor Green
 
-Step 'Starting nourxplay Service'
+Step 'Starting ZoneXplay Service'
 Start-Service -Name $ServiceName
 $svc = Get-Service -Name $ServiceName
 $svc.WaitForStatus('Running', [TimeSpan]::FromSeconds(20))
@@ -538,10 +503,10 @@ try {
 if (-not $tcpOk) { Fail 'Voltra TCP 10086 is not listening. Check service.log before using the system.' }
 
 if (-not $NonInteractive) {
-    Step 'Opening nourxplay independently from the installer console'
+    Step 'Opening ZoneXplay independently from the installer console'
     # Launch the verified .lnk through the Windows shell. Explorer owns the new
     # desktop process, so closing this installer CMD/PowerShell window cannot
-    # terminate nourxplay.
+    # terminate ZoneXplay.
     $launched = $false
     try {
         Start-Process -FilePath "$env:WINDIR\explorer.exe" -ArgumentList @('"' + $PrimaryDesktopShortcut + '"')
@@ -559,22 +524,22 @@ if (-not $NonInteractive) {
         }
     }
     if (-not $launched) {
-        Write-Warning 'nourxplay was installed successfully but could not be auto-opened. Use the nourxplay desktop shortcut.'
+        Write-Warning 'ZoneXplay was installed successfully but could not be auto-opened. Use the ZoneXplay desktop shortcut.'
     }
 }
 
 Write-Host ''
 Write-Host '===================================================' -ForegroundColor Green
-Write-Host ' nourxplay installation completed' -ForegroundColor Green
+Write-Host ' ZoneXplay installation completed' -ForegroundColor Green
 Write-Host '===================================================' -ForegroundColor Green
-Write-Host 'Desktop App : nourxplay.exe (embedded Chromium / Electron)'
+Write-Host 'Desktop App : ZoneXplay.exe (embedded Chromium / Electron)'
 Write-Host 'Local Web   : http://127.0.0.1:8000 (internal backend only)'
 Write-Host 'Voltra TCP  : 10086'
 Write-Host "Data        : $DataRoot"
 Write-Host "Service log : $DataRoot\logs\service.log"
 Write-Host 'Cloud Sync  : DISABLED'
 Write-Host 'Internet    : Required once to download Electron unless its runtime ZIP is bundled; otherwise only for Tailscale remote support'
-Write-Host 'Remote setup: Run Setup-nourxplay-Remote-Support.bat as Administrator after Tailscale is installed'
+Write-Host 'Remote setup: Tailscale is included; use Setup-ZoneXplay-Remote-Support.bat only for initial Tailnet/Serve setup if needed'
 Write-Host ''
 if (-not $NonInteractive) {
     Read-Host 'Press Enter to close'
