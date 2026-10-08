@@ -1,4 +1,4 @@
-nourxplay v0.33 Desktop Runtime
+ZoneXplay v0.33 Desktop Runtime
 ======================================
 
 The normal installer downloads the official Electron 44.4.5 Windows x64 runtime once and verifies SHA256.
