@@ -1,10 +1,10 @@
 # ZoneXplay
 
-Current Windows client baseline: **v0.35.2 Local Production + Standard Tailscale + Desktop Edition**.
+Current Windows client baseline: **v0.35.3 Local Production + Hidden-Tray Tailscale + Modal Error Routing + Desktop Edition**.
 
 ZoneXplay is the cashier/session-management application with embedded Voltra screen-power management and ROOT-only remote support.
 
-## v0.35.2 Local Production highlights
+## v0.35.3 Local Production highlights
 
 - Presents the customer-facing product under the **ZoneXplay** brand.
 - Adds a self-contained Electron/Chromium desktop client instead of depending on Microsoft Edge or Chrome.
@@ -16,8 +16,9 @@ ZoneXplay is the cashier/session-management application with embedded Voltra scr
 - System Logs are available as a separate **ROOT-only** page.
 - ROOT password remains mandatory.
 - Remote support remains available through Tailscale Serve.
+- Action errors raised while a modal is open are displayed inside that modal instead of behind it.
 - The customer installer bundles the official Tailscale MSI and installs it silently as a Windows service.
-- The standard Tailscale tray GUI remains available while ZoneXplay keeps the Windows service and private Serve resilient.
+- The Tailscale Windows service stays unattended while the per-user tray GUI is suppressed; ZoneXplay keeps private Serve resilient.
 - The ZoneXplay Windows Service automatically restores Tailscale and private HTTPS Serve if either stops or Serve is cleared.
 - The verified offline Python runtime and dependency wheels are included under `offline-runtime/`.
 - Cash-drawer settlement is admin-password protected; staff expenses remain pending until an ADMIN/ROOT approves or rejects them.
@@ -70,4 +71,4 @@ The application backend is intentionally not exposed on `0.0.0.0:8000`.
 
 ## Railway / historical staging files
 
-The repository still contains earlier Railway/staging support files and historical runtime patches for compatibility and reference. The Windows client source under `backend/` and `frontend/` is now at **v0.35.2**.
+The repository still contains earlier Railway/staging support files and historical runtime patches for compatibility and reference. The Windows client source under `backend/` and `frontend/` is now at **v0.35.3**.
