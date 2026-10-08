@@ -4,7 +4,7 @@ Current Windows client baseline: **v0.35.2 Local Production + Standard Tailscale
 
 ZoneXplay is the cashier/session-management application with embedded Voltra screen-power management and ROOT-only remote support.
 
-## v0.35 white-label highlights
+## v0.35.2 Local Production highlights
 
 - Presents the customer-facing product under the **ZoneXplay** brand.
 - Adds a self-contained Electron/Chromium desktop client instead of depending on Microsoft Edge or Chrome.
