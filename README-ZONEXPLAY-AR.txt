@@ -1,4 +1,4 @@
-ZoneXplay v0.35.2
+ZoneXplay v0.35.3
 =================
 
 نسخة Local Production مستقرة لتشغيل وإدارة جلسات وأجهزة الألعاب على Windows.
@@ -13,8 +13,8 @@ ZoneXplay v0.35.2
 
 Tailscale / Remote Support
 --------------------------
-- Tailscale يتم تثبيته من الـInstaller كنسخة Windows عادية.
-- أيقونة Tailscale والـTray GUI تظل متاحة بشكل طبيعي.
+- Tailscale يتم تثبيته تلقائياً مع ZoneXplay ويعمل كـWindows Service في الخلفية.
+- أيقونة Tailscale والـTray GUI مخفيان على جهاز العميل.
 - خدمة Tailscale تعمل Automatic مع Windows.
 - ZoneXplay يستخدم Tailscale Serve للوصول الخاص عبر HTTPS داخل الـTailnet.
 - لا تستخدم Tailscale Funnel.
