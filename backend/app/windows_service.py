@@ -81,6 +81,7 @@ def _configure_environment() -> Path:
     # Customer installations keep private Tailscale Serve available without
     # requiring a user to open ZoneXplay or press Enable Remote Access.
     os.environ.setdefault("PLAYZONE_REMOTE_SUPPORT_ALWAYS_ON", "1")
+    os.environ.setdefault("PLAYZONE_TAILSCALE_HEADLESS", "1")
     return data
 
 
